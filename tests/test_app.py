@@ -114,6 +114,21 @@ class KvissTest(unittest.TestCase):
         self.assertIn("2 kategorier · 3 spørsmål", page)
         self.assertIn('href="/regler"', self.client.get("/").get_data(as_text=True))
 
+    def test_host_view_follows_tv(self):
+        self.assertIn("Brettet vises", self.client.get("/vert").get_data(as_text=True))
+        self.client.get("/q/0/1")  # TV opens a question
+        page = self.client.get("/vert").get_data(as_text=True)
+        self.assertIn("Q2", page)
+        self.assertIn("A2", page)
+        v = str(self.game.version)
+        self.assertEqual(self.client.get(f"/vert/panel?v={v}").status_code, 204)
+        self.judge(0, 1, "wrong", 0)  # any change bumps the version
+        panel = self.client.get(f"/vert/panel?v={v}")
+        self.assertEqual(panel.status_code, 200)
+        self.assertIn("Feil: A", panel.get_data(as_text=True))
+        self.client.get("/")  # TV back on the board
+        self.assertIn("Brettet vises", self.client.get("/vert/panel").get_data(as_text=True))
+
     def test_bad_config_message(self):
         self.config.write_text(json.dumps({**QUIZ, "players": []}))
         with self.assertRaisesRegex(ConfigError, "players"):

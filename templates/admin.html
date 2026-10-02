@@ -23,6 +23,12 @@
   </section>
 
   <section>
+    <h2>Vertsvisning</h2>
+    <p>Åpne <a class="gold" href="{{ url_for('host') }}">{{ request.host }}{{ url_for('host') }}</a> på en annen enhet
+      for å se svaret på spørsmålet som vises på TV-en. Den oppdateres automatisk og kan ikke endre spillet.</p>
+  </section>
+
+  <section>
     <h2>Spill</h2>
     <p>{{ game.state.used|length }} av {{ game.total_questions() }} spørsmål spilt.</p>
     <form method="post" action="{{ url_for('undo') }}">

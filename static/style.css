@@ -442,6 +442,41 @@ a.cell:active { transform: scale(0.96); }
   .rule-cards { grid-template-columns: 1fr; }
 }
 
+/* --- host view (second device) ------------------------------------------ */
+
+.page-host { height: auto; min-height: 100dvh; }
+.live { color: var(--ok); font-weight: 700; font-size: 14px; }
+.live.offline { color: var(--bad); }
+.host { flex: 1; padding: 2vmin 4vmin 4vmin; }
+.host-panel { max-width: 900px; margin: 0 auto; }
+.host-meta { margin: 0.5rem 0; font-size: clamp(16px, 4vmin, 28px); font-weight: 700; text-transform: uppercase; }
+.host-question { margin: 0 0 1.2rem; font-size: clamp(18px, 4.5vmin, 34px); line-height: 1.3; }
+.host-label { margin: 0; color: var(--muted); font-size: 14px; letter-spacing: 0.15em; text-transform: uppercase; }
+.host-answer {
+  margin: 0.2rem 0 1rem;
+  color: var(--gold);
+  font-size: clamp(30px, 9vmin, 72px);
+  font-weight: 900;
+  line-height: 1.1;
+}
+.host-status { margin: 0 0 1rem; color: #4ee07f; font-size: clamp(16px, 4vmin, 26px); font-weight: 700; }
+.host-status.bad { color: #ff6b6b; }
+.host-idle { margin: 1.5rem 0 0.5rem; color: var(--gold); font-size: clamp(24px, 7vmin, 52px); font-weight: 800; }
+.host-progress { margin: 0 0 1rem; color: var(--muted); font-size: clamp(15px, 3.5vmin, 22px); }
+.host-ranking { margin: 0 0 1rem; padding: 0; list-style: none; font-size: clamp(18px, 4.5vmin, 30px); }
+.host-scores {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1.5rem 0 0;
+  padding: 1rem 0 0;
+  border-top: 1px solid var(--tile);
+  list-style: none;
+}
+.host-scores li { padding: 0.4rem 0.8rem; background: var(--used); border-radius: 6px; font-size: 16px; }
+.host-scores strong { color: var(--gold); margin-left: 0.3rem; }
+.host-scores strong.negative { color: #ff6b6b; }
+
 /* --- admin -------------------------------------------------------------- */
 
 .admin {

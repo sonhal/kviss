@@ -12,6 +12,10 @@ The screens are in Norwegian (bokmål); code, config keys and docs are in Englis
   - ✗ subtracts the value. That player is locked out of the question and the others can still try.
   - **Nobody** closes the question with no change to any score.
 - **Regler** (`/regler`): a one-screen summary of the rules in Norwegian for the contestants, linked from the top bar.
+- **Vertsvisning** (`/vert`): open this on a **second device** to see the answer while you host. It follows the TV
+  live, updating about a second after you open a question. It shows the question, the answer in large text, who
+  has answered wrong and the scores. It is read-only: it has no buttons and can't change the game.
+  Log in with the same password. The link is also on the admin page.
 - **Admin** (`⚙`, `/admin`): adjust scores by hand, undo, and reset the game.
 - **Undo** reverts the last scoring action (up to 50 steps), for when you mis-tap.
 - When every question has been played, the board switches to a **Kahoot-style podium**. **You control the

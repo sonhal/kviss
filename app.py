@@ -85,6 +85,10 @@ class Game:
         self.state_path = Path(state_path)
         self.lock = threading.Lock()
         self.state = self._load()
+        # Live, in-memory only (not saved, not undoable): the question the TV is
+        # showing, and a counter that changes whenever anything a viewer sees changes.
+        self.current = None
+        self.version = secrets.randbelow(1 << 30)  # random start: no clash after a restart
 
     # --- persistence -------------------------------------------------------
 
@@ -110,6 +114,7 @@ class Game:
         tmp = self.state_path.with_suffix(".tmp")
         tmp.write_text(json.dumps(self.state))
         os.replace(tmp, self.state_path)  # atomic: never leaves a half-written file
+        self.version += 1
 
     def _checkpoint(self):
         snap = {k: copy.deepcopy(self.state[k]) for k in ("scores", "used", "wrong")}
@@ -151,6 +156,14 @@ class Game:
         return players
 
     # --- actions -----------------------------------------------------------
+
+    def set_current(self, c=None, r=None):
+        """Remember which question the TV shows (None = the board), for the host view."""
+        current = None if c is None else (c, r)
+        with self.lock:
+            if current != self.current:
+                self.current = current
+                self.version += 1
 
     def judge(self, c, r, player, result):
         """Apply a host decision. Returns True if the question is now finished."""
@@ -226,6 +239,7 @@ def create_app(config_path=None, state_path=None, password=None):
 
     @app.get("/")
     def board():
+        game.set_current(None)
         if game.is_over():
             return render_template("final.html", ranking=game.standings())
         cats = game.quiz["categories"]
@@ -237,6 +251,7 @@ def create_app(config_path=None, state_path=None, password=None):
         q = game.question(c, r)
         if q is None:
             abort(404)
+        game.set_current(c, r)
         reveal = request.args.get("reveal") == "1" or game.is_used(c, r)
         return render_template("question.html", c=c, r=r, q=q,
                                category=game.quiz["categories"][c]["name"], reveal=reveal)
@@ -258,6 +273,32 @@ def create_app(config_path=None, state_path=None, password=None):
     def rules():
         values = [q["value"] for cat in game.quiz["categories"] for q in cat["questions"]]
         return render_template("rules.html", values=values)
+
+    # Host view for a second device: read-only, follows the TV live.
+    def host_context():
+        ctx = {"current": None, "version": game.version}
+        if game.current:
+            c, r = game.current
+            ctx["current"] = {
+                "c": c, "r": r, "q": game.question(c, r),
+                "category": game.quiz["categories"][c]["name"],
+                "wrong": [game.quiz["players"][p] for p in game.wrong_players(c, r)],
+                "used": game.is_used(c, r), "winner": game.winner(c, r),
+            }
+        return ctx
+
+    @app.get("/vert")
+    def host():
+        return render_template("host.html", **host_context())
+
+    @app.get("/vert/panel")
+    def host_panel():
+        # Polled by app.js. 204 = nothing changed since the version the page already shows.
+        if request.args.get("v") == str(game.version):
+            return Response(status=204)
+        resp = Response(render_template("_host_panel.html", **host_context()))
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
 
     @app.get("/admin")
     def admin():

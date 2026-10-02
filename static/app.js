@@ -168,6 +168,42 @@
     soundBtn.addEventListener("click", () => { Sound.setMuted(!Sound.muted); paint(); });
   }
 
+  // --- Host view: follow the TV live -----------------------------------------
+  // Polls a small endpoint; the server answers 204 when nothing changed, so
+  // idle polling costs next to nothing.
+  const hostPanel = document.getElementById("host-panel");
+  if (hostPanel) {
+    const live = document.querySelector("[data-live]");
+    const answerText = () => (hostPanel.querySelector(".host-answer") || {}).textContent || "";
+    const setLive = (ok) => {
+      live.classList.toggle("offline", !ok);
+      live.textContent = ok ? "● Live" : "● Frakoblet";
+    };
+    const poll = async () => {
+      const panel = hostPanel.querySelector(".host-panel");
+      const v = panel ? panel.dataset.version : "";
+      try {
+        const res = await fetch(`${hostPanel.dataset.poll}?v=${encodeURIComponent(v)}`, { cache: "no-store" });
+        if (res.status === 200) {
+          const before = answerText();
+          hostPanel.innerHTML = await res.text();
+          const answer = hostPanel.querySelector(".host-answer");
+          if (answer && answer.textContent !== before) {
+            answer.classList.add("pop-in");
+            if (navigator.vibrate) navigator.vibrate(40); // new question on the TV
+          }
+          setLive(true);
+        } else {
+          setLive(res.status === 204);
+        }
+      } catch (_) {
+        setLive(false);
+      }
+      setTimeout(poll, document.hidden ? 5000 : 1500);
+    };
+    setTimeout(poll, 1500);
+  }
+
   // --- Animated numbers -----------------------------------------------------
   function countTo(el, from, to, delayMs = 0) {
     if (reduceMotion || from === to) { el.textContent = to; return; }

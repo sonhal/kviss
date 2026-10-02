@@ -1,0 +1,33 @@
+<div class="host-panel" data-version="{{ version }}">
+  {% if current %}
+  <p class="host-meta">{{ current.category }} · <span class="gold">{{ current.q.value }}</span></p>
+  <p class="host-question">{{ current.q.question }}</p>
+  <p class="host-label">Svar</p>
+  <p class="host-answer">{{ current.q.answer }}</p>
+  {% if current.used %}
+  <p class="host-status">
+    {% if current.winner is not none %}✓ {{ quiz.players[current.winner] }} svarte riktig{% else %}Ingen svarte riktig{% endif %}
+  </p>
+  {% elif current.wrong %}
+  <p class="host-status bad">✗ Feil: {{ current.wrong|join(", ") }}</p>
+  {% endif %}
+  {% elif game.is_over() %}
+  <p class="host-idle">Spillet er ferdig</p>
+  <ol class="host-ranking">
+    {% for p in game.standings() %}
+    <li>{{ p.place }}. {{ p.name }} <strong>{{ p.score }}</strong></li>
+    {% endfor %}
+  </ol>
+  {% else %}
+  <p class="host-idle">Brettet vises</p>
+  <p class="host-progress">{{ game.state.used|length }} av {{ game.total_questions() }} spørsmål spilt.
+    Velg et spørsmål på TV-en, så dukker svaret opp her.</p>
+  {% endif %}
+
+  <ul class="host-scores">
+    {% for name in quiz.players %}
+    {% set score = game.state.scores[loop.index0] %}
+    <li><span>{{ name }}</span> <strong{% if score < 0 %} class="negative"{% endif %}>{{ score }}</strong></li>
+    {% endfor %}
+  </ul>
+</div>

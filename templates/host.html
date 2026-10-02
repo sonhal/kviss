@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Vert · {{ quiz.title }}{% endblock %}
+{% block body_class %}page-host{% endblock %}
+{% block content %}
+{# Fallback without JavaScript: reload every few seconds. app.js polls instead. #}
+<noscript><meta http-equiv="refresh" content="3"></noscript>
+<header class="topbar">
+  <h1>Vertsvisning</h1>
+  <nav><span class="live" data-live>● Live</span></nav>
+</header>
+<main class="host" id="host-panel" data-poll="{{ url_for('host_panel') }}">
+  {% include "_host_panel.html" %}
+</main>
+{% endblock %}
