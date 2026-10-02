@@ -1,55 +1,55 @@
 {
   "title": "Kviss",
-  "players": ["Team Red", "Team Blue", "Team Green"],
+  "players": ["Lag Rød", "Lag Blå", "Lag Grønn"],
   "categories": [
     {
-      "name": "Geography",
+      "name": "Geografi",
       "questions": [
-        { "value": 100, "question": "This is the capital of Norway.", "answer": "Oslo" },
-        { "value": 200, "question": "This river is the longest in Europe.", "answer": "The Volga" },
-        { "value": 300, "question": "This country has the most islands in the world.", "answer": "Sweden" },
-        { "value": 400, "question": "This is the smallest country in the world by area.", "answer": "Vatican City" },
-        { "value": 500, "question": "This lake is the deepest in the world.", "answer": "Lake Baikal" }
+        { "value": 100, "question": "Dette er hovedstaden i Norge.", "answer": "Oslo" },
+        { "value": 200, "question": "Dette er Norges lengste elv.", "answer": "Glomma" },
+        { "value": 300, "question": "Dette landet har flest øyer i verden.", "answer": "Sverige" },
+        { "value": 400, "question": "Dette er verdens minste land målt i areal.", "answer": "Vatikanstaten" },
+        { "value": 500, "question": "Dette er verdens dypeste innsjø.", "answer": "Bajkalsjøen" }
       ]
     },
     {
-      "name": "Science",
+      "name": "Vitenskap",
       "questions": [
-        { "value": 100, "question": "H2O is the chemical formula for this.", "answer": "Water" },
-        { "value": 200, "question": "This planet is known as the Red Planet.", "answer": "Mars" },
-        { "value": 300, "question": "This is the hardest natural substance.", "answer": "Diamond" },
-        { "value": 400, "question": "This scientist proposed the theory of general relativity.", "answer": "Albert Einstein" },
-        { "value": 500, "question": "This element has the chemical symbol W.", "answer": "Tungsten" }
+        { "value": 100, "question": "H2O er den kjemiske formelen for dette.", "answer": "Vann" },
+        { "value": 200, "question": "Denne planeten kalles den røde planeten.", "answer": "Mars" },
+        { "value": 300, "question": "Dette er det hardeste naturlige stoffet.", "answer": "Diamant" },
+        { "value": 400, "question": "Denne forskeren la fram den generelle relativitetsteorien.", "answer": "Albert Einstein" },
+        { "value": 500, "question": "Dette grunnstoffet har det kjemiske symbolet W.", "answer": "Wolfram" }
       ]
     },
     {
-      "name": "Movies",
+      "name": "Film",
       "questions": [
-        { "value": 100, "question": "This green ogre lives in a swamp.", "answer": "Shrek" },
-        { "value": 200, "question": "\"I'll be back\" was said by this actor as the Terminator.", "answer": "Arnold Schwarzenegger" },
-        { "value": 300, "question": "This 1997 film about a sinking ship won 11 Oscars.", "answer": "Titanic" },
-        { "value": 400, "question": "This director made Jaws, E.T. and Jurassic Park.", "answer": "Steven Spielberg" },
-        { "value": 500, "question": "In The Matrix, Neo takes a pill of this colour.", "answer": "Red" }
+        { "value": 100, "question": "Dette grønne trollet bor i en sump.", "answer": "Shrek" },
+        { "value": 200, "question": "Denne skuespilleren sa «I'll be back» som Terminator.", "answer": "Arnold Schwarzenegger" },
+        { "value": 300, "question": "Denne filmen fra 1997 om et synkende skip vant 11 Oscar-priser.", "answer": "Titanic" },
+        { "value": 400, "question": "Denne regissøren laget Haisommer, E.T. og Jurassic Park.", "answer": "Steven Spielberg" },
+        { "value": 500, "question": "I The Matrix tar Neo en pille med denne fargen.", "answer": "Rød" }
       ]
     },
     {
-      "name": "Food",
+      "name": "Mat",
       "questions": [
-        { "value": 100, "question": "Guacamole is made mainly from this fruit.", "answer": "Avocado" },
-        { "value": 200, "question": "This Italian cheese is traditionally used on a Margherita pizza.", "answer": "Mozzarella" },
-        { "value": 300, "question": "Sushi rice is seasoned with this type of vinegar.", "answer": "Rice vinegar" },
-        { "value": 400, "question": "This spice, from a crocus flower, is the most expensive by weight.", "answer": "Saffron" },
-        { "value": 500, "question": "Brunost, the Norwegian brown cheese, gets its colour from this process.", "answer": "Caramelising the milk sugars (boiling the whey)" }
+        { "value": 100, "question": "Guacamole lages hovedsakelig av denne frukten.", "answer": "Avokado" },
+        { "value": 200, "question": "Denne italienske osten brukes tradisjonelt på pizza Margherita.", "answer": "Mozzarella" },
+        { "value": 300, "question": "Pinnekjøtt lages tradisjonelt av dette kjøttet.", "answer": "Lam eller sau (ribbe)" },
+        { "value": 400, "question": "Dette krydderet, fra en krokusblomst, er verdens dyreste per vekt.", "answer": "Safran" },
+        { "value": 500, "question": "Brunost lages hovedsakelig av dette biproduktet fra osteproduksjon.", "answer": "Myse" }
       ]
     },
     {
-      "name": "Music",
+      "name": "Musikk",
       "questions": [
-        { "value": 100, "question": "This band sang \"Take On Me\".", "answer": "a-ha" },
-        { "value": 200, "question": "This instrument has 88 keys.", "answer": "Piano" },
-        { "value": 300, "question": "This 'King of Pop' released Thriller.", "answer": "Michael Jackson" },
-        { "value": 400, "question": "This Swedish group won Eurovision in 1974 with \"Waterloo\".", "answer": "ABBA" },
-        { "value": 500, "question": "This composer wrote the Peer Gynt suite.", "answer": "Edvard Grieg" }
+        { "value": 100, "question": "Dette bandet sang «Take On Me».", "answer": "a-ha" },
+        { "value": 200, "question": "Dette instrumentet har 88 tangenter.", "answer": "Piano" },
+        { "value": 300, "question": "Denne «King of Pop» ga ut albumet Thriller.", "answer": "Michael Jackson" },
+        { "value": 400, "question": "Denne svenske gruppen vant Eurovision i 1974 med «Waterloo».", "answer": "ABBA" },
+        { "value": 500, "question": "Denne komponisten skrev musikken til Peer Gynt.", "answer": "Edvard Grieg" }
       ]
     }
   ]

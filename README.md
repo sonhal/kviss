@@ -2,6 +2,7 @@
 
 A Jeopardy-style quiz built to be run from a phone that is screen-shared to a TV.
 It uses Python (Flask), plain HTML and CSS, and needs no JavaScript.
+The screens are in Norwegian (bokmål); code, config keys and docs are in English.
 
 - **Board** (`/`): categories, point values, and live scores. Questions that have been played go dark.
 - **Question** (`/q/<cat>/<row>`): the question in big text. Tap **Show answer** to reveal the answer to the room.
@@ -22,13 +23,13 @@ Edit `quiz.json`, or point `KVISS_CONFIG` at another file:
 
 ```json
 {
-  "title": "Friday Kviss",
-  "players": ["Team Red", "Team Blue"],
+  "title": "Fredagskviss",
+  "players": ["Lag Rød", "Lag Blå"],
   "categories": [
     {
-      "name": "Geography",
+      "name": "Geografi",
       "questions": [
-        { "value": 100, "question": "This is the capital of Norway.", "answer": "Oslo" },
+        { "value": 100, "question": "Dette er hovedstaden i Norge.", "answer": "Oslo" },
         { "value": 200, "question": "...", "answer": "..." }
       ]
     }
@@ -49,7 +50,7 @@ The app checks the file at startup and stops with a clear message if something i
 > `{"title": str, "players": [str], "categories": [{"name": str, "questions": [{"value": int, "question": str, "answer": str}]}]}`.
 > Make 5 categories about **<TOPICS>**, each with 5 questions valued 100, 200, 300, 400, 500, increasing in difficulty.
 > Players: **<NAMES>**. Write each question as a clue, and keep the answer short (1–5 words).
-> Language: **<LANGUAGE>**. Output only the JSON, with no commentary.
+> Language: **Norwegian (bokmål)**. Output only the JSON, with no commentary.
 
 Then check it locally before you deploy:
 
@@ -69,13 +70,13 @@ HOST=0.0.0.0 .venv/bin/python app.py                      # reachable from your 
 
 ## Deploy to a VPS (systemd + venv + Caddy)
 
-These steps assume Debian/Ubuntu. Replace `kviss.example.com` with your domain.
+These steps are for Debian 12 (bookworm) or newer, which ships `caddy` in its standard repositories.
 
 ```bash
 # 1. Code and a service user
 sudo apt install -y python3-venv git caddy
 sudo useradd --system --home /opt/kviss --shell /usr/sbin/nologin kviss
-sudo git clone <your-repo-url> /opt/kviss
+sudo git clone https://github.com/sonhal/kviss.git /opt/kviss   # private repo: use a deploy key or token
 sudo python3 -m venv /opt/kviss/.venv
 sudo /opt/kviss/.venv/bin/pip install -r /opt/kviss/requirements.txt
 sudo chown -R kviss:kviss /opt/kviss
@@ -90,12 +91,12 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now kviss
 sudo systemctl status kviss          # look for "Listening at: http://127.0.0.1:8000"
 
-# 4. HTTPS via Caddy (DNS A record must already point at the VPS; ports 80/443 open)
-sudo cp /opt/kviss/deploy/Caddyfile /etc/caddy/Caddyfile   # edit the domain first
+# 4. HTTPS via Caddy (DNS A/AAAA record for kviss.sonhal.no must point at the VPS; ports 80/443 open)
+sudo cp /opt/kviss/deploy/Caddyfile /etc/caddy/Caddyfile   # overwrites the default; merge by hand if Caddy already serves other sites
 sudo systemctl reload caddy
 ```
 
-Open `https://kviss.example.com`. The browser asks for a login: the username can be anything, and the
+Open `https://kviss.sonhal.no`. The browser asks for a login: the username can be anything, and the
 password is the one in `/etc/kviss.env`.
 
 **Updating the quiz:** edit `quiz.json` (or `git pull`), then run `sudo systemctl restart kviss`.

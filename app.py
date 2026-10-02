@@ -206,7 +206,7 @@ def create_app(config_path=None, state_path=None, password=None):
             auth = request.authorization
             given = (auth.password or "") if auth else ""
             if not secrets.compare_digest(given.encode(), password.encode()):
-                return Response("Login required", 401, {"WWW-Authenticate": 'Basic realm="kviss"'})
+                return Response("Innlogging kreves", 401, {"WWW-Authenticate": 'Basic realm="kviss"'})
         # Reject cross-site form posts (CSRF): browsers send Origin on POST.
         if request.method == "POST":
             origin = request.headers.get("Origin")

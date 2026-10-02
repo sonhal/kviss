@@ -71,7 +71,7 @@ class KvissTest(unittest.TestCase):
         self.assertFalse(self.game.is_used(0, 0))
         for c, r in [(0, 0), (0, 1), (1, 0)]:
             self.judge(c, r, "nobody")
-        self.assertIn("Final results", self.client.get("/").get_data(as_text=True))
+        self.assertIn("Sluttresultat", self.client.get("/").get_data(as_text=True))
 
     def test_state_survives_restart_but_not_quiz_change(self):
         self.judge(0, 0, "correct", 1)

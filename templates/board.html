@@ -5,7 +5,7 @@
   <h1>{{ quiz.title }}</h1>
   <nav>
     {% if game.can_undo() %}
-    <form method="post" action="{{ url_for('undo') }}"><button class="tool">↶ Undo</button></form>
+    <form method="post" action="{{ url_for('undo') }}"><button class="tool">↶ Angre</button></form>
     {% endif %}
     <a class="tool" href="{{ url_for('admin') }}">⚙</a>
   </nav>
@@ -13,7 +13,7 @@
 
 {% if game.is_over() %}
 <main class="final">
-  <h2>Final results</h2>
+  <h2>Sluttresultat</h2>
   <ol class="podium">
     {% for p in game.standings() %}
     <li class="place-{{ loop.index }}"><span>{{ p.name }}</span><strong>{{ p.score }}</strong></li>

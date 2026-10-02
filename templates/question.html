@@ -3,7 +3,7 @@
 {% block content %}
 <header class="topbar">
   <h1>{{ category }} · <span class="gold">{{ q.value }}</span></h1>
-  <nav><a class="tool" href="{{ url_for('board') }}">← Board</a></nav>
+  <nav><a class="tool" href="{{ url_for('board') }}">← Brett</a></nav>
 </header>
 
 <main class="clue">
@@ -11,14 +11,14 @@
   {% if reveal %}
   <p class="clue-answer">{{ q.answer }}</p>
   {% else %}
-  <a class="reveal" href="{{ url_for('question', c=c, r=r, reveal=1) }}">Show answer</a>
+  <a class="reveal" href="{{ url_for('question', c=c, r=r, reveal=1) }}">Vis svar</a>
   {% endif %}
 </main>
 
 {% if game.is_used(c, r) %}
 <footer class="judge done">
   {% set w = game.winner(c, r) %}
-  <p>{% if w is not none %}{{ quiz.players[w] }} got it.{% else %}Nobody got it.{% endif %}</p>
+  <p>{% if w is not none %}{{ quiz.players[w] }} svarte riktig.{% else %}Ingen svarte riktig.{% endif %}</p>
 </footer>
 {% else %}
 <footer class="judge">
@@ -29,12 +29,12 @@
     <input type="hidden" name="player" value="{{ p }}">
     <input type="hidden" name="reveal" value="{{ '1' if reveal else '0' }}">
     <span class="player-name">{{ name }}</span>
-    <button name="result" value="correct" class="ok" {% if p in wrong %}disabled{% endif %} aria-label="{{ name }} correct">✓</button>
-    <button name="result" value="wrong" class="bad" {% if p in wrong %}disabled{% endif %} aria-label="{{ name }} wrong">✗</button>
+    <button name="result" value="correct" class="ok" {% if p in wrong %}disabled{% endif %} aria-label="{{ name }} riktig">✓</button>
+    <button name="result" value="wrong" class="bad" {% if p in wrong %}disabled{% endif %} aria-label="{{ name }} feil">✗</button>
   </form>
   {% endfor %}
   <form method="post" action="{{ url_for('judge', c=c, r=r) }}">
-    <button name="result" value="nobody" class="nobody">Nobody</button>
+    <button name="result" value="nobody" class="nobody">Ingen</button>
   </form>
 </footer>
 {% endif %}

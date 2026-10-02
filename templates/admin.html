@@ -4,12 +4,12 @@
 {% block content %}
 <header class="topbar">
   <h1>Admin</h1>
-  <nav><a class="tool" href="{{ url_for('board') }}">← Board</a></nav>
+  <nav><a class="tool" href="{{ url_for('board') }}">← Brett</a></nav>
 </header>
 
 <main class="admin">
   <section>
-    <h2>Adjust scores</h2>
+    <h2>Juster poeng</h2>
     {% for name in quiz.players %}
     {% set p = loop.index0 %}
     <form method="post" action="{{ url_for('adjust') }}" class="adjust">
@@ -23,15 +23,15 @@
   </section>
 
   <section>
-    <h2>Game</h2>
-    <p>{{ game.state.used|length }} of {{ game.total_questions() }} questions played.</p>
+    <h2>Spill</h2>
+    <p>{{ game.state.used|length }} av {{ game.total_questions() }} spørsmål spilt.</p>
     <form method="post" action="{{ url_for('undo') }}">
       <input type="hidden" name="next" value="admin">
-      <button {% if not game.can_undo() %}disabled{% endif %}>↶ Undo last action</button>
+      <button {% if not game.can_undo() %}disabled{% endif %}>↶ Angre siste handling</button>
     </form>
     <form method="post" action="{{ url_for('reset') }}" class="reset">
-      <label><input type="checkbox" name="confirm" value="yes" required> Yes, wipe all scores</label>
-      <button class="bad">Reset game</button>
+      <label><input type="checkbox" name="confirm" value="yes" required> Ja, nullstill alle poeng</label>
+      <button class="bad">Nullstill spill</button>
     </form>
   </section>
 </main>
