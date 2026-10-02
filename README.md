@@ -80,8 +80,9 @@ curl -u ":$PW" "$URL/api/quizzes/fredagskviss" > f.json   # download, edit, uplo
 curl -u ":$PW" -X DELETE "$URL/api/quizzes/fredagskviss"  # 204; old games keep their copy
 ```
 
-A rejected upload returns a message like
-`{"error": "category 'Sport', question #3: 'answer' is required"}` and changes nothing.
+A rejected upload changes nothing and lists every problem at once, for example
+`{"error": "...", "problems": ["category 'Sport', question #3, 'answer' is required", "category 'Sport', question #4, 'value' must be a whole number"]}`
+(`error` is the same list as one string, one problem per line). Uploads over 1 MB get `413`.
 
 You can also import files from a shell on the server. Run it as the `kviss` user so the database keeps the right
 owner:
@@ -115,7 +116,15 @@ there. If it's left out, the names from the last game are pre-filled instead. `s
 as blank tiles. Up to about 6 categories × 5 questions reads well on a TV.
 
 The app checks the quiz when you upload it and rejects it with a clear message if something is wrong, for
-example `category 'Science', question #3: 'answer' is required`.
+example `category 'Science', question #3, 'answer' is required`. The checks are strict, to catch mistakes early:
+
+- Values need the right JSON type: `"value": 100`, not `"value": "100"`, and `"start": 30`, not `"start": "30"`.
+- Unknown fields are rejected, so a typo like `"anwser"` is reported instead of silently ignored.
+- Spaces around text are trimmed, and text can't be empty.
+- Limits: at most 12 categories, 20 questions per category and 20 players; titles and category names up to
+  100 characters, questions and answers up to 1000, player names up to 40.
+
+The rules are in `schemas.py` (Pydantic models).
 
 ### Music questions
 
@@ -267,7 +276,8 @@ password is the one in `/etc/kviss.env`.
 is needed. Audio files for music questions are not in git: copy them to `/opt/kviss/media/` as described in
 [Add an MP3](#add-an-mp3-or-other-audio-file).
 
-**Updating the app:** `cd /opt/kviss && sudo git pull && sudo chown -R kviss:kviss /opt/kviss && sudo systemctl restart kviss`.
+**Updating the app:** `cd /opt/kviss && sudo git pull && sudo /opt/kviss/.venv/bin/pip install -r requirements.txt && sudo chown -R kviss:kviss /opt/kviss && sudo systemctl restart kviss`.
+The `pip install` step picks up new dependencies (such as Pydantic); skipping it can stop the app from starting.
 
 **Upgrading from the version with `state.json`:** after the pull and restart, the empty database imports
 `quiz.json` and `quiz-example.json`. Open the site, which goes to **Nytt spill**, pick a quiz and type the players.
@@ -289,9 +299,12 @@ folder), `KVISS_CONFIG` (quiz imported on first start) and `KVISS_TZ` (time zone
   Without HTTPS, the Basic Auth password would travel in plain text.
 - POSTs whose `Origin` header points at a different site are rejected, which blocks cross-site form
   attacks (CSRF) from other pages open in the same browser.
-- The quiz API needs the password like every other page. Further protection of `/api/` (rate limits, request
-  size, IP allow-lists) belongs in the Caddy config in front of the app. An upload is checked in full before
-  anything is written.
+- The quiz API needs the password like every other page. Request bodies over 1 MB are refused (`413`). Further
+  protection of `/api/` (rate limits, IP allow-lists) belongs in the Caddy config in front of the app.
+- All input is parsed by Pydantic models in `schemas.py` before the app uses it. An upload is checked in full
+  before anything is written. Quiz JSON is checked strictly (no type coercion, no unknown fields, no
+  `NaN`/`Infinity`, size limits). Every form post is checked too (player index, score change, verdict, redirect
+  target); a value the pages never send gets a `400`.
 - The database is only reached through parameterised SQL queries, so quiz text can't alter a query.
 - All quiz text goes through Jinja's auto-escaping, so HTML in a question cannot inject scripts.
 - A `youtube` value must be exactly an 11-character ID (`A-Z a-z 0-9 _ -`), so the quiz file can't point the
