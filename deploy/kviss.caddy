@@ -1,0 +1,6 @@
+# Site block for kviss. Import it from your main Caddyfile:  import /etc/caddy/kviss.caddy
+# Caddy fetches and renews the Let's Encrypt certificate for this name automatically.
+kviss.sonhal.no {
+	encode gzip
+	reverse_proxy 127.0.0.1:8000
+}

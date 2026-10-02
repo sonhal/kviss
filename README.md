@@ -70,11 +70,12 @@ HOST=0.0.0.0 .venv/bin/python app.py                      # reachable from your 
 
 ## Deploy to a VPS (systemd + venv + Caddy)
 
-These steps are for Debian 12 (bookworm) or newer, which ships `caddy` in its standard repositories.
+These steps are for Debian 12 (bookworm) or newer, on a VPS that already runs Caddy for other sites.
+Nothing here replaces your existing Caddyfile: kviss is added as one imported site block.
 
 ```bash
 # 1. Code and a service user
-sudo apt install -y python3-venv git caddy
+sudo apt install -y python3-venv git
 sudo useradd --system --home /opt/kviss --shell /usr/sbin/nologin kviss
 sudo git clone https://github.com/sonhal/kviss.git /opt/kviss   # private repo: use a deploy key or token
 sudo python3 -m venv /opt/kviss/.venv
@@ -85,16 +86,29 @@ sudo chown -R kviss:kviss /opt/kviss
 echo "KVISS_PASSWORD=$(openssl rand -base64 12)" | sudo tee /etc/kviss.env
 sudo chmod 600 /etc/kviss.env
 
-# 3. Service
+# 3. Service. First check that nothing else already listens on port 8000.
+#    If something does, change 8000 in deploy/kviss.service AND deploy/kviss.caddy.
+sudo ss -ltnp | grep ':8000 ' || echo "port 8000 is free"
 sudo cp /opt/kviss/deploy/kviss.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now kviss
 sudo systemctl status kviss          # look for "Listening at: http://127.0.0.1:8000"
+curl -I http://127.0.0.1:8000/       # expect 401 (password set) or 200
 
-# 4. HTTPS via Caddy (DNS A/AAAA record for kviss.sonhal.no must point at the VPS; ports 80/443 open)
-sudo cp /opt/kviss/deploy/Caddyfile /etc/caddy/Caddyfile   # overwrites the default; merge by hand if Caddy already serves other sites
-sudo systemctl reload caddy
+# 4. HTTPS via your existing Caddy (DNS A/AAAA record for kviss.sonhal.no must point at the VPS)
+sudo cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.bak                 # backup
+sudo cp /opt/kviss/deploy/kviss.caddy /etc/caddy/kviss.caddy
+echo 'import /etc/caddy/kviss.caddy' | sudo tee -a /etc/caddy/Caddyfile   # appends after your other sites
+sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile     # must say "Valid configuration"
+sudo systemctl reload caddy          # graceful: your other sites keep serving
 ```
+
+The `import` line has to come after any global options block (`{ ... }` at the very top of the
+Caddyfile). Appending it to the end of the file satisfies that. If `validate` fails, nothing has been
+applied yet. Fix the problem, or restore the backup, before you reload.
+
+If you keep site blocks in a directory you already import (e.g. `import sites/*`), copy
+`kviss.caddy` into that directory instead and skip the `echo ... | tee -a` line.
 
 Open `https://kviss.sonhal.no`. The browser asks for a login: the username can be anything, and the
 password is the one in `/etc/kviss.env`.
