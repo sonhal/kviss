@@ -9,7 +9,8 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
-from app import BASE_DIR, ConfigError, create_app, load_quiz, main, slugify
+from app import BASE_DIR, ConfigError, create_app, load_quiz, main
+from schemas import slugify
 
 QUIZ = {
     "title": "Test",
@@ -184,6 +185,8 @@ class KvissTest(unittest.TestCase):
         self.assert_bad_music({"youtube": "dQw4w9WgXcQ", "start": -1}, "'start'")
         self.assert_bad_music({"youtube": "dQw4w9WgXcQ", "start": True}, "'start'")
         self.assert_bad_music({"start": 10}, "needs 'youtube' or 'audio'")
+        self.assert_bad_music({"audio": "song\x00.mp3"}, "file name")
+        self.assert_bad_music({"youtube": "dQw4w9WgXcQ", "start": "10"}, "'start' must be a number")
 
     def test_youtube_question_page(self):
         client = self.music_quiz({"youtube": "dQw4w9WgXcQ", "start": 30, "end": 45})
@@ -294,7 +297,7 @@ class KvissTest(unittest.TestCase):
 
     def test_player_names_are_checked(self):
         for names, message in [([" ", ""], "minst én"), (["Ola", "ola"], "samme navn"),
-                               (["x" * 41], "maks 40"), ([str(i) for i in range(21)], "Maks 20")]:
+                               (["x" * 41], "maks 40"), ([str(i) for i in range(31)], "Maks 30")]:
             resp = self.start("test", names)
             self.assertEqual(resp.status_code, 400)
             self.assertIn(message, resp.get_data(as_text=True))
@@ -352,6 +355,45 @@ class KvissTest(unittest.TestCase):
             self.assertIn(message, resp.get_json()["error"])
         resp = self.client.post("/api/quizzes", data="[" * 100000, content_type="application/json")
         self.assertEqual(resp.status_code, 400)
+
+    def test_api_quiz_types_are_strict(self):
+        def question(**fields):
+            return {**{"value": 100, "question": "Q", "answer": "A"}, **fields}
+        quiz = {"title": "T", "categories": [{"name": "Sport", "questions": [
+            question(value="100"), question(value=True), question(anwser="typo"), question(question="  ")]}]}
+        resp = self.upload(quiz)
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.get_json()["problems"], [  # every problem at once, located by category name
+            "category 'Sport', question #1, 'value' must be a whole number",
+            "category 'Sport', question #2, 'value' must be a whole number",
+            "category 'Sport', question #3, 'anwser' is not a known field (check the spelling)",
+            "category 'Sport', question #4, 'question' must not be empty",
+        ])
+        # Python's json module accepts these, but they are not numbers a clip can use.
+        for number in ("Infinity", "NaN"):
+            body = ('{"title": "T", "categories": [{"name": "S", "questions": [{"value": 1, "question": "q", '
+                    f'"answer": "a", "youtube": "dQw4w9WgXcQ", "end": {number}}}]}}]}}')
+            resp = self.client.post("/api/quizzes", data=body, content_type="application/json")
+            self.assertEqual(resp.status_code, 400, number)
+        resp = self.upload({**QUIZ, "title": "  Mellomrom  ", "slug": None})
+        self.assertEqual(resp.get_json()["slug"], "mellomrom")
+        self.assertEqual(self.client.get("/api/quizzes/mellomrom").get_json()["title"], "Mellomrom")
+
+    def test_api_rejects_large_uploads(self):
+        resp = self.client.post("/api/quizzes", data=b" " * (2 * 1024 * 1024), content_type="application/json")
+        self.assertEqual(resp.status_code, 413)
+
+    def test_tampered_forms_are_rejected(self):
+        for path, data in [("/q/0/0/judge", {"result": "steal"}), ("/q/0/0/judge", {"result": "correct"}),
+                           ("/q/0/0/judge", {"result": "correct", "player": "x"}),
+                           ("/adjust", {"player": "0", "delta": "9" * 5000}), ("/adjust", {"player": "-1", "delta": "1"}),
+                           ("/undo", {"next": "https://evil.example"})]:
+            self.assertEqual(self.client.post(path, data=data).status_code, 400, (path, data))
+        self.assertEqual(self.game.state["scores"], [0, 0])
+        self.assertFalse(self.game.can_undo())
+        self.client.post("/adjust", data={"player": "1", "delta": "-100"})
+        self.assertEqual(self.game.state["scores"], [0, -100])
+        self.assertEqual(self.client.post("/undo", data={"next": "admin"}).headers["Location"], "/admin")
 
     def test_api_needs_password(self):
         client = self.make_client(password="s3cret")

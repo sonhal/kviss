@@ -15,12 +15,10 @@ import copy
 import json
 import mimetypes
 import os
-import re
 import secrets
 import sqlite3
 import sys
 import threading
-import unicodedata
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -30,14 +28,13 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from flask import (Flask, Response, abort, jsonify, redirect, render_template, request, send_from_directory,
                    url_for)
 
+from schemas import (AdjustForm, ConfigError, ConfirmForm, FormError, JudgeForm, NewGameForm, UndoForm, parse_form,
+                     parse_quiz)
+
 BASE_DIR = Path(__file__).resolve().parent
 mimetypes.add_type("application/manifest+json", ".webmanifest")
 UNDO_LIMIT = 50
-MAX_PLAYERS = 20
-MAX_NAME = 40
-YOUTUBE_ID = re.compile(r"[A-Za-z0-9_-]{11}")
-SLUG = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
-AUDIO_TYPES = {".mp3", ".m4a", ".aac", ".wav"}  # formats both Safari and Chrome play
+MAX_UPLOAD = 1024 * 1024  # bytes; a big quiz is well under 100 kB
 
 
 def _env_path(name, default):
@@ -56,102 +53,16 @@ def now():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-# --- quiz validation ----------------------------------------------------------
-
-
-class ConfigError(ValueError):
-    pass
-
-
-def _require(cond, msg):
-    if not cond:
-        raise ConfigError(msg)
-
-
-def _is_seconds(v):
-    return isinstance(v, (int, float)) and not isinstance(v, bool) and v >= 0
-
-
-def slugify(text):
-    """'Fredagskviss på Bærum' -> 'fredagskviss-pa-baerum'."""
-    text = text.lower().translate(str.maketrans({"æ": "ae", "ø": "o", "å": "a"}))
-    text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
-    return re.sub(r"[^a-z0-9]+", "-", text).strip("-")[:60].strip("-")
-
-
-def _check_music(q, where, media_dir):
-    """Validate the optional music fields of a question. Returns the audio file name, if any."""
-    youtube, audio = q.get("youtube"), q.get("audio")
-    if youtube is None and audio is None:
-        for field in ("start", "end"):
-            _require(field not in q, f"{where}: '{field}' needs 'youtube' or 'audio'")
-        return None
-    _require(youtube is None or audio is None, f"{where}: use either 'youtube' or 'audio', not both")
-    if youtube is not None:
-        _require(isinstance(youtube, str) and YOUTUBE_ID.fullmatch(youtube),
-                 f"{where}: 'youtube' must be an 11-character video ID like 'dQw4w9WgXcQ' "
-                 f"(the part after v= in the link), got {youtube!r}")
-    else:
-        _require(isinstance(audio, str) and audio.strip(), f"{where}: 'audio' must be a file name")
-        _require(Path(audio).suffix.lower() in AUDIO_TYPES,
-                 f"{where}: 'audio' must be one of {', '.join(sorted(AUDIO_TYPES))}, got {audio!r}")
-        file = (media_dir / audio).resolve()
-        _require(".." not in Path(audio).parts and file.is_relative_to(media_dir.resolve()),
-                 f"{where}: 'audio' must be inside {media_dir}")
-        q["audio"] = audio = Path(audio).as_posix()  # "./a.mp3" -> "a.mp3", the path browsers request
-        _require(file.is_file(), f"{where}: audio file not found: {media_dir / audio}")
-    start, end = q.get("start", 0), q.get("end")
-    _require(_is_seconds(start), f"{where}: 'start' must be a number of seconds (0 or more)")
-    _require(end is None or (_is_seconds(end) and end > start),
-             f"{where}: 'end' must be a number of seconds after 'start'")
-    return audio
+# --- input ------------------------------------------------------------------
+# The rules for quiz JSON and form input live in schemas.py.
 
 
 def validate_quiz(data, media_dir):
-    """Check a parsed quiz and return a cleaned copy. Raises ConfigError with a readable message.
+    """Check a parsed quiz and return a cleaned copy. Raises ConfigError with readable messages.
 
     Audio files for music questions must already be in media_dir.
     """
-    media_dir = Path(media_dir)
-    _require(isinstance(data, dict), "top level must be an object")
-    data = copy.deepcopy(data)
-
-    title = data.get("title")
-    _require(isinstance(title, str) and title.strip(), "'title' is required")
-    slug = data.get("slug")
-    if slug is None:
-        slug = slugify(title)
-        _require(slug, "'title' needs at least one letter or digit, or give a 'slug'")
-    _require(isinstance(slug, str) and len(slug) <= 60 and SLUG.fullmatch(slug),
-             f"'slug' must be lowercase letters, digits and dashes, like 'fredagskviss-2', got {slug!r}")
-
-    # Optional: names suggested on the new-game screen. The host can change them there.
-    players = data.get("players", [])
-    _require(isinstance(players, list), "'players' must be a list of names")
-    for p in players:
-        _require(isinstance(p, str) and p.strip(), f"player names must be non-empty strings, got {p!r}")
-    _require(len(set(players)) == len(players), "player names must be unique")
-
-    categories = data.get("categories")
-    _require(isinstance(categories, list) and categories, "'categories' must be a non-empty list")
-    for ci, cat in enumerate(categories, 1):
-        where = f"category #{ci}"
-        _require(isinstance(cat, dict), f"{where} must be an object")
-        _require(isinstance(cat.get("name"), str) and cat["name"].strip(), f"{where}: 'name' is required")
-        where = f"category {cat['name']!r}"
-        questions = cat.get("questions")
-        _require(isinstance(questions, list) and questions, f"{where}: 'questions' must be a non-empty list")
-        for qi, q in enumerate(questions, 1):
-            qwhere = f"{where}, question #{qi}"
-            _require(isinstance(q, dict), f"{qwhere} must be an object")
-            value = q.get("value")
-            _require(isinstance(value, int) and not isinstance(value, bool) and value > 0,
-                     f"{qwhere}: 'value' must be a positive integer")
-            for field in ("question", "answer"):
-                _require(isinstance(q.get(field), str) and q[field].strip(), f"{qwhere}: '{field}' is required")
-            _check_music(q, qwhere, media_dir)
-
-    return {"slug": slug, "title": title, "players": players, "categories": categories}
+    return parse_quiz(data, media_dir)
 
 
 def load_quiz(path, media_dir=None):
@@ -160,23 +71,9 @@ def load_quiz(path, media_dir=None):
     path = Path(path)
     try:
         data = json.loads(path.read_bytes())
-    except json.JSONDecodeError as e:
+    except (json.JSONDecodeError, UnicodeDecodeError) as e:
         raise ConfigError(f"{path}: invalid JSON: {e}") from e
     return validate_quiz(data, media_dir or path.parent / "media")
-
-
-def parse_players(lines):
-    """Player names typed on the new-game screen, one per line. Returns (names, error)."""
-    names = [n.strip() for n in lines if n.strip()]
-    if not names:
-        return names, "Skriv inn minst én deltaker."
-    if len(names) > MAX_PLAYERS:
-        return names, f"Maks {MAX_PLAYERS} deltakere."
-    if any(len(n) > MAX_NAME for n in names):
-        return names, f"Navn kan være maks {MAX_NAME} tegn."
-    if len({n.casefold() for n in names}) < len(names):
-        return names, "To deltakere har samme navn."
-    return names, None
 
 
 # --- storage ------------------------------------------------------------------
@@ -487,6 +384,7 @@ def create_app(db_path=None, password=None, media_dir=None, seed=None):
         tz = timezone.utc
 
     app = Flask(__name__)
+    app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD  # larger request bodies get 413 before they are read
     store = Store(db_path)
     if store.is_empty():
         for path in seed:
@@ -525,6 +423,14 @@ def create_app(db_path=None, password=None, media_dir=None, seed=None):
         game = kviss.game
         return {"game": game, "quiz": game.quiz if game else {"title": "Kviss"}}
 
+    def form(model):
+        """The posted form, validated by a schemas.py model. Bad values (only possible with a
+        hand-made request, the pages never send them) get a 400."""
+        try:
+            return parse_form(model, request.form.to_dict())
+        except FormError:
+            abort(400)
+
     def current_game():
         """The game on the TV, or abort with a redirect to the new-game screen."""
         game = kviss.game
@@ -558,13 +464,11 @@ def create_app(db_path=None, password=None, media_dir=None, seed=None):
         game = current_game()
         if game.question(c, r) is None:
             abort(404)
-        player = request.form.get("player", "-1")
-        finished = game.judge(c, r, int(player) if player.lstrip("-").isdigit() else -1,
-                              request.form.get("result", ""))
-        if finished:
+        verdict = form(JudgeForm)
+        if game.judge(c, r, verdict.player, verdict.result):
             return redirect(url_for("board"))
         # Keep the answer visible if it was already revealed when the host judged.
-        reveal = {"reveal": "1"} if request.form.get("reveal") == "1" else {}
+        reveal = {"reveal": "1"} if verdict.reveal else {}
         return redirect(url_for("question", c=c, r=r, **reveal))
 
     @app.get("/regler")
@@ -625,13 +529,14 @@ def create_app(db_path=None, password=None, media_dir=None, seed=None):
         if request.method == "GET":
             players = chosen["players"] or store.last_players()
             return render_template("new_game_players.html", chosen=chosen, players="\n".join(players))
-        players, error = parse_players(request.form.get("players", "").splitlines())
-        if not error and game and game.in_progress() and request.form.get("confirm") != "yes":
-            error = "Kryss av for å avslutte spillet som pågår."
-        if error:
-            return render_template("new_game_players.html", chosen=chosen, players="\n".join(players),
-                                   error=error), 400
-        if kviss.start(slug, players) is None:  # deleted in the meantime
+        try:
+            entry = parse_form(NewGameForm, request.form.to_dict())
+            if game and game.in_progress() and not entry.confirm:
+                raise FormError("Kryss av for å avslutte spillet som pågår.")
+        except FormError as e:
+            return render_template("new_game_players.html", chosen=chosen,
+                                   players=request.form.get("players", "").strip(), error=str(e)), 400
+        if kviss.start(slug, entry.players) is None:  # deleted in the meantime
             abort(404)
         return redirect(url_for("board"))
 
@@ -644,23 +549,21 @@ def create_app(db_path=None, password=None, media_dir=None, seed=None):
 
     @app.post("/adjust")
     def adjust():
-        game = current_game()
-        try:
-            game.adjust(int(request.form["player"]), int(request.form["delta"]))
-        except (KeyError, ValueError):
-            abort(400)
+        change = form(AdjustForm)
+        current_game().adjust(change.player, change.delta)
         return redirect(url_for("admin"))
 
     @app.post("/undo")
     def undo():
-        current_game().undo()
-        return redirect(request.form.get("next") == "admin" and url_for("admin") or url_for("board"))
+        game = current_game()
+        target = form(UndoForm).next
+        game.undo()
+        return redirect(url_for(target))
 
     @app.post("/reset")
     def reset():
         game = current_game()
-        if request.form.get("confirm") != "yes":
-            abort(400)
+        form(ConfirmForm)
         game.reset()
         return redirect(url_for("board"))
 
@@ -690,7 +593,7 @@ def create_app(db_path=None, password=None, media_dir=None, seed=None):
         try:
             quiz = validate_quiz(data, kviss.media_dir)
         except ConfigError as e:
-            return api_error(str(e), 400)
+            return jsonify(error=str(e), problems=e.problems), 400
         created = store.save_quiz(quiz)
         body = {**summary(store.quiz(quiz["slug"])), "created": created}
         return jsonify(body), 201 if created else 200
