@@ -121,7 +121,7 @@ example `category 'Science', question #3, 'answer' is required`. The checks are 
 - Values need the right JSON type: `"value": 100`, not `"value": "100"`, and `"start": 30`, not `"start": "30"`.
 - Unknown fields are rejected, so a typo like `"anwser"` is reported instead of silently ignored.
 - Spaces around text are trimmed, and text can't be empty.
-- Limits: at most 12 categories, 20 questions per category and 20 players; titles and category names up to
+- Limits: at most 12 categories, 20 questions per category and 30 players; titles and category names up to
   100 characters, questions and answers up to 1000, player names up to 40.
 
 The rules are in `schemas.py` (Pydantic models).

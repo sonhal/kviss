@@ -20,7 +20,7 @@ from pydantic import (BaseModel, BeforeValidator, ConfigDict, Field, PlainSerial
                       ValidationError, ValidationInfo, field_validator, model_validator)
 from pydantic_core import PydanticCustomError
 
-MAX_PLAYERS = 20
+MAX_PLAYERS = 30
 MAX_NAME = 40
 MAX_CATEGORIES = 12
 MAX_QUESTIONS = 20  # per category

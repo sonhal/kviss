@@ -297,7 +297,7 @@ class KvissTest(unittest.TestCase):
 
     def test_player_names_are_checked(self):
         for names, message in [([" ", ""], "minst én"), (["Ola", "ola"], "samme navn"),
-                               (["x" * 41], "maks 40"), ([str(i) for i in range(21)], "Maks 20")]:
+                               (["x" * 41], "maks 40"), ([str(i) for i in range(31)], "Maks 30")]:
             resp = self.start("test", names)
             self.assertEqual(resp.status_code, 400)
             self.assertIn(message, resp.get_data(as_text=True))
