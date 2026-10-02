@@ -68,35 +68,76 @@ The format:
 ```
 
 Rules: at least 1 player (names must be unique), at least 1 category, and every question needs a
-positive integer `value`, a `question` and an `answer`. Categories can have different numbers of
-questions. Missing slots show as blank tiles. Up to about 6 categories × 5 questions reads well on a TV.
+positive integer `value`, a `question` and an `answer`. A question can also play a song: see
+[Music questions](#music-questions). Categories can have different numbers of questions. Missing slots show
+as blank tiles. Up to about 6 categories × 5 questions reads well on a TV.
 
 The app checks the file at startup and stops with a clear message if something is wrong, for example
 `category 'Science', question #3: 'answer' is required`.
 
 ### Music questions
 
-Add `youtube` **or** `audio` to a question to make it a music question. The question and answer work as usual:
-one clip is one question, and the host judges it like any other.
+A music question plays a song clip, and the players answer a question about it (title, artist, year …).
+One clip is one question, and the host judges it like any other. The song comes either from **YouTube**
+(only the sound is played, the video is never shown) or from an **audio file** such as an MP3.
 
-```json
-{ "value": 300, "question": "Hvem er artisten?", "answer": "Kygo",
-  "youtube": "dQw4w9WgXcQ", "start": 42, "end": 57 },
-{ "value": 400, "question": "Hva heter låta?", "answer": "Take On Me",
-  "audio": "take-on-me.mp3", "start": 0, "end": 20 }
-```
+#### Add a YouTube song
 
-- `youtube`: the 11-character **video ID**, i.e. the part after `v=` in `https://www.youtube.com/watch?v=dQw4w9WgXcQ`
-  (or after `youtu.be/`). A whole link is rejected.
-- `audio`: a file name in the `media/` folder **next to the quiz file** (e.g. `/opt/kviss/media/take-on-me.mp3`).
-  Sub-folders are fine (`"audio": "80s/take-on-me.mp3"`). Formats: `.mp3`, `.m4a`, `.aac`, `.wav`.
-  `media/` is in `.gitignore`, so copy the files to the server yourself (e.g. with `scp`).
+1. Find the song on YouTube and copy the link, e.g. `https://www.youtube.com/watch?v=dQw4w9WgXcQ`.
+2. Take the **video ID**: the 11 characters after `v=` (here `dQw4w9WgXcQ`). In a share link like
+   `https://youtu.be/dQw4w9WgXcQ?si=…` it is the part after `youtu.be/` and before `?`.
+   Paste only the ID, not the whole link.
+3. Pick the part of the song to play. Find the start time in the YouTube player, e.g. 1:15 = 75 seconds.
+4. Add the question to a category in `quiz.json`:
+
+   ```json
+   { "value": 300, "question": "Hva heter låta?", "answer": "Never Gonna Give You Up",
+     "youtube": "dQw4w9WgXcQ", "start": 75, "end": 90 }
+   ```
+
+5. Restart the app (`sudo systemctl restart kviss` on the server), open **⚙ Admin → Musikk** and tap the
+   question to check that the clip plays. Some videos can't be played outside YouTube (see below). If so,
+   use another upload of the same song.
+
+#### Add an MP3 (or other audio file)
+
+1. Create a folder called `media` **in the same folder as the quiz file**, and put the file in it.
+   Locally: `kviss/media/take-on-me.mp3`. On the server: `/opt/kviss/media/take-on-me.mp3`.
+   Sub-folders are fine. Formats: `.mp3`, `.m4a`, `.aac`, `.wav`.
+2. Add the question, with the file name relative to `media/`:
+
+   ```json
+   { "value": 400, "question": "Hvem er artisten?", "answer": "a-ha",
+     "audio": "take-on-me.mp3", "start": 0, "end": 20 }
+   ```
+
+3. Copy the files to the server. `media/` is in `.gitignore`, so `git pull` does not bring the songs:
+
+   ```bash
+   scp media/*.mp3 you@your-vps:/tmp/                    # from your own machine
+   sudo mkdir -p /opt/kviss/media                        # on the server
+   sudo mv /tmp/*.mp3 /opt/kviss/media/
+   sudo chown -R kviss:kviss /opt/kviss/media
+   sudo systemctl restart kviss
+   ```
+
+4. Test the clip from **⚙ Admin → Musikk**.
+
+#### Fields
+
+- `youtube`: an 11-character YouTube **video ID**. A whole link is rejected.
+- `audio`: a file name inside `media/` next to the quiz file, e.g. `"take-on-me.mp3"` or `"80s/take-on-me.mp3"`.
+- Use **either** `youtube` **or** `audio` in a question, not both.
 - `start` / `end` (optional): seconds into the song. Playback begins at `start` (default 0) and stops at
   `end` (default: the end of the song). **Spill av** after the clip has ended, or **Fra start**, plays it again
-  from `start`.
+  from `start`. Decimals like `42.5` are allowed.
+- `question`, `answer` and `value` work as for any other question.
 
-The app checks this at startup: an unknown file, a link instead of an ID, or `end` before `start` stops it
-with a clear message. The host view (`/vert`) shows which clip is playing, but never plays audio itself.
+The app checks music questions at startup, like the rest of the file. A missing audio file, a link instead of an
+ID, or `end` before `start` stops it with a clear message, e.g.
+`category 'Musikk', question #3: audio file not found: /opt/kviss/media/take-on-me.mp3`. The list of allowed audio files
+is read at startup too, so **restart the app after adding songs**. The host view (`/vert`) shows which clip is
+playing, but never plays sound itself.
 
 Things to know about YouTube:
 
@@ -116,6 +157,9 @@ Things to know about YouTube:
 > Make 5 categories about **<TOPICS>**, each with 5 questions valued 100, 200, 300, 400, 500, increasing in difficulty.
 > Players: **<NAMES>**. Write each question as a clue, and keep the answer short (1–5 words).
 > Language: **Norwegian (bokmål)**. Output only the JSON, with no commentary.
+
+An AI often makes up YouTube IDs that don't exist, so add music questions yourself (see
+[Music questions](#music-questions)) and test them on the admin page.
 
 Then check it locally before you deploy:
 
@@ -179,6 +223,8 @@ Open `https://kviss.sonhal.no`. The browser asks for a login: the username can b
 password is the one in `/etc/kviss.env`.
 
 **Updating the quiz:** edit `quiz.json` (or `git pull`), then run `sudo systemctl restart kviss`.
+Audio files for music questions are not in git: copy them to `/opt/kviss/media/` as described in
+[Add an MP3](#add-an-mp3-or-other-audio-file).
 
 ### Security notes
 
