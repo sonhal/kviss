@@ -5,3 +5,5 @@ venv/
 state.json
 *.tmp
 media/
+kviss.db
+kviss.db-*

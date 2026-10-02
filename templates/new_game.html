@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Nytt spill{% endblock %}
+{% block body_class %}page-admin{% endblock %}
+{% block content %}
+<header class="topbar">
+  <h1>Nytt spill</h1>
+  <nav>
+    {% if game %}<a class="tool" href="{{ url_for('board') }}">← Brett</a>{% endif %}
+    <a class="tool" href="{{ url_for('admin') }}">⚙</a>
+  </nav>
+</header>
+
+<main class="admin">
+  <section>
+    <h2>Velg kviss</h2>
+    {% if quizzes %}
+    <ul class="quiz-list">
+      {% for q in quizzes %}
+      <li>
+        <a class="quiz-pick" href="{{ url_for('new_game_players', slug=q.slug) }}">
+          <strong>{{ q.title }}</strong>
+          <span class="muted">{{ q.categories|length }} {{ "kategori" if q.categories|length == 1 else "kategorier" }} · {{ q.questions }} spørsmål
+            {%- if q.music %} · {{ q.music }} med musikk{% endif %}
+            · {% if q.plays %}spilt {{ q.plays }} {{ 'gang' if q.plays == 1 else 'ganger' }}, sist {{ q.last_played|when }}{% else %}aldri spilt{% endif %}</span>
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p>Ingen kviss er lagt inn ennå. Last opp en JSON-fil til <code>{{ url_for('api_quizzes') }}</code>, se README.</p>
+    {% endif %}
+  </section>
+</main>
+{% endblock %}

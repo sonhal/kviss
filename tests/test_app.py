@@ -1,10 +1,15 @@
 import base64
+import io
 import json
+import os
+import sqlite3
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
+from unittest import mock
 
-from app import BASE_DIR, ConfigError, create_app, load_quiz
+from app import BASE_DIR, ConfigError, create_app, load_quiz, main, slugify
 
 QUIZ = {
     "title": "Test",
@@ -24,15 +29,25 @@ QUIZ = {
 class KvissTest(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
-        self.config = self.tmp / "quiz.json"
-        self.config.write_text(json.dumps(QUIZ))
-        self.state = self.tmp / "state.json"
+        self.db = self.tmp / "kviss.db"
+        self.media = self.tmp / "media"
         self.client = self.make_client()
+        self.upload(QUIZ)
+        self.start("test", ["A", "B"])
 
-    def make_client(self, password=""):
-        app = create_app(self.config, self.state, password=password)
-        self.game = app.config["GAME"]
-        return app.test_client()
+    def make_client(self, password="", seed=()):
+        self.app = create_app(self.db, password=password, media_dir=self.media, seed=list(seed))
+        return self.app.test_client()
+
+    @property
+    def game(self):
+        return self.app.config["KVISS"].game
+
+    def upload(self, quiz, client=None):
+        return (client or self.client).post("/api/quizzes", json=quiz)
+
+    def start(self, slug, players, **form):
+        return self.client.post(f"/nytt/{slug}", data={"players": "\n".join(players), **form})
 
     def judge(self, c, r, result, player=None):
         data = {"result": result}
@@ -40,8 +55,9 @@ class KvissTest(unittest.TestCase):
             data["player"] = str(player)
         return self.client.post(f"/q/{c}/{r}/judge", data=data)
 
-    def test_example_quiz_is_valid(self):
+    def test_example_quizzes_are_valid(self):
         load_quiz(BASE_DIR / "quiz.json")
+        load_quiz(BASE_DIR / "quiz-example.json")
 
     def test_board_renders_and_escapes(self):
         self.assertEqual(self.client.get("/").status_code, 200)
@@ -86,13 +102,11 @@ class KvissTest(unittest.TestCase):
             self.judge(c, r, "nobody")
         self.assertIn("Sluttresultat", self.client.get("/").get_data(as_text=True))
 
-    def test_state_survives_restart_but_not_quiz_change(self):
+    def test_state_survives_restart(self):
         self.judge(0, 0, "correct", 1)
         self.make_client()
         self.assertEqual(self.game.state["scores"], [0, 100])
-        self.config.write_text(json.dumps({**QUIZ, "title": "Changed"}))
-        self.make_client()
-        self.assertEqual(self.game.state["scores"], [0, 0])
+        self.assertEqual(self.game.quiz["players"], ["A", "B"])
 
     def test_reset_requires_confirm(self):
         self.judge(0, 0, "correct", 0)
@@ -130,21 +144,28 @@ class KvissTest(unittest.TestCase):
         self.assertIn("Brettet vises", self.client.get("/vert/panel").get_data(as_text=True))
 
     def test_bad_config_message(self):
-        self.config.write_text(json.dumps({**QUIZ, "players": []}))
-        with self.assertRaisesRegex(ConfigError, "players"):
-            load_quiz(self.config)
+        bad = self.tmp / "bad.json"
+        bad.write_text(json.dumps({**QUIZ, "players": ["A", "A"]}))
+        with self.assertRaisesRegex(ConfigError, "unique"):
+            load_quiz(bad)
+        bad.write_text("{nope")
+        with self.assertRaisesRegex(ConfigError, "invalid JSON"):
+            load_quiz(bad)
 
     # --- music questions ---------------------------------------------------
 
     def music_quiz(self, *extra):
-        """Write a quiz whose first category has the given music questions; return a client."""
-        (self.tmp / "media").mkdir(exist_ok=True)
-        (self.tmp / "media" / "song.mp3").write_bytes(b"ID3" + bytes(range(256)) * 4)
+        """Upload and start a quiz whose first category has the given music questions."""
+        self.media.mkdir(exist_ok=True)
+        (self.media / "song.mp3").write_bytes(b"ID3" + bytes(range(256)) * 4)
         quiz = json.loads(json.dumps(QUIZ))
         for q in extra:
             quiz["categories"][0]["questions"].append({"value": 300, "question": "Låt?", "answer": "Svar", **q})
-        self.config.write_text(json.dumps(quiz))
-        return self.make_client()
+        resp = self.upload(quiz)
+        if resp.status_code >= 400:
+            raise ConfigError(resp.get_json()["error"])
+        self.start("test", ["A", "B"])
+        return self.client
 
     def assert_bad_music(self, fields, message):
         with self.assertRaisesRegex(ConfigError, message):
@@ -156,7 +177,7 @@ class KvissTest(unittest.TestCase):
         self.assert_bad_music({"youtube": "dQw4w9WgXc\"><x"}, "11-character video ID")
         self.assert_bad_music({"youtube": "dQw4w9WgXcQ", "audio": "song.mp3"}, "not both")
         self.assert_bad_music({"audio": "missing.mp3"}, "not found")
-        self.assert_bad_music({"audio": "../quiz.json"}, "must be one of")
+        self.assert_bad_music({"audio": "../kviss.db"}, "must be one of")
         self.assert_bad_music({"audio": "../media/song.mp3"}, "inside")
         self.assert_bad_music({"audio": "/etc/song.mp3"}, "inside")
         self.assert_bad_music({"youtube": "dQw4w9WgXcQ", "start": 20, "end": 10}, "'end'")
@@ -183,9 +204,9 @@ class KvissTest(unittest.TestCase):
         self.assertEqual(resp.data, b"ID3" + bytes(range(7)))
         resp.close()
         # Only files the quiz uses are served.
-        (self.tmp / "media" / "other.mp3").write_bytes(b"x")
+        (self.media / "other.mp3").write_bytes(b"x")
         self.assertEqual(client.get("/media/other.mp3").status_code, 404)
-        self.assertEqual(client.get("/media/../quiz.json").status_code, 404)
+        self.assertEqual(client.get("/media/../kviss.db").status_code, 404)
 
     def test_audio_name_is_normalized(self):
         client = self.music_quiz({"audio": "./song.mp3"})
@@ -206,6 +227,175 @@ class KvissTest(unittest.TestCase):
         admin = client.get("/admin").get_data(as_text=True)
         self.assertIn('href="/q/0/2"', admin)
         self.assertIn("Svar", admin)
+
+    # --- quiz library and games ----------------------------------------------
+
+    def test_no_game_goes_to_new_game_screen(self):
+        self.db.unlink()
+        client = self.make_client()
+        self.assertIsNone(self.game)
+        self.assertEqual(client.get("/").headers["Location"], "/nytt")
+        self.assertEqual(client.get("/q/0/0").headers["Location"], "/nytt")
+        self.assertEqual(client.post("/undo").headers["Location"], "/nytt")
+        self.assertIn("Ingen kviss er lagt inn", client.get("/nytt").get_data(as_text=True))
+        self.assertIn("Ingen spill pågår", client.get("/vert").get_data(as_text=True))
+        self.assertIn("Ingen spill pågår", client.get("/admin").get_data(as_text=True))
+        self.assertEqual(client.get("/media/song.mp3").status_code, 404)
+
+    def test_new_game_screen_lists_quizzes(self):
+        self.upload({**QUIZ, "title": "Fredagskviss på Bærum", "players": ["Rød", "Blå"]})
+        page = self.client.get("/nytt").get_data(as_text=True)
+        self.assertIn('href="/nytt/fredagskviss-pa-baerum"', page)
+        self.assertIn("2 kategorier · 3 spørsmål", page)
+        self.assertIn("spilt 1 gang", page)  # the quiz started in setUp
+        self.assertIn("aldri spilt", page)
+        # Suggested players from the quiz are pre-filled; otherwise the last game's players.
+        self.assertIn(">Rød\nBlå</textarea>", self.client.get("/nytt/fredagskviss-pa-baerum").get_data(as_text=True))
+        self.upload({**QUIZ, "title": "Uten lag"})
+        self.assertIn(">A\nB</textarea>", self.client.get("/nytt/uten-lag").get_data(as_text=True))
+        self.assertEqual(self.client.get("/nytt/nope").status_code, 404)
+
+    def test_rerun_quiz_with_other_players_keeps_history(self):
+        self.judge(0, 0, "correct", 0)
+        for c, r in [(0, 1), (1, 0)]:
+            self.judge(c, r, "nobody")
+        self.assertIn("Nytt spill", self.client.get("/").get_data(as_text=True))  # podium links to it
+        first = self.game.id
+        resp = self.start("test", ["Ola", "Kari", "Per"])
+        self.assertEqual(resp.headers["Location"], "/")
+        self.assertNotEqual(self.game.id, first)
+        self.assertEqual(self.game.quiz["players"], ["Ola", "Kari", "Per"])
+        self.assertEqual(self.game.state["scores"], [0, 0, 0])
+        self.assertIn("Ola", self.client.get("/").get_data(as_text=True))
+        admin = self.client.get("/admin").get_data(as_text=True)
+        self.assertIn("1. A <strong>100</strong> · 2. B <strong>0</strong>", admin)
+        self.assertIn("(pågår)", admin)
+        with sqlite3.connect(self.db) as db:
+            ended = db.execute("SELECT ended_at IS NOT NULL FROM games ORDER BY id").fetchall()
+        self.assertEqual(ended, [(1,), (0,)])
+
+    def test_untouched_game_is_not_kept(self):
+        self.start("test", ["C", "D"])
+        with sqlite3.connect(self.db) as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM games").fetchone()[0], 1)
+
+    def test_only_one_current_game(self):
+        with sqlite3.connect(self.db) as db, self.assertRaises(sqlite3.IntegrityError):
+            db.execute("INSERT INTO games (quiz, players, state, started_at) VALUES ('{}', '[]', '{}', 'x')")
+
+    def test_ending_a_game_in_progress_needs_confirm(self):
+        self.judge(0, 0, "correct", 0)
+        resp = self.start("test", ["C", "D"])
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("Kryss av", resp.get_data(as_text=True))
+        self.assertEqual(self.game.quiz["players"], ["A", "B"])
+        self.start("test", ["C", "D"], confirm="yes")
+        self.assertEqual(self.game.quiz["players"], ["C", "D"])
+
+    def test_player_names_are_checked(self):
+        for names, message in [([" ", ""], "minst én"), (["Ola", "ola"], "samme navn"),
+                               (["x" * 41], "maks 40"), ([str(i) for i in range(21)], "Maks 20")]:
+            resp = self.start("test", names)
+            self.assertEqual(resp.status_code, 400)
+            self.assertIn(message, resp.get_data(as_text=True))
+        self.start("test", ["  Ola  ", "", "Kari"])
+        self.assertEqual(self.game.quiz["players"], ["Ola", "Kari"])
+
+    def test_editing_a_quiz_does_not_change_running_game(self):
+        self.judge(0, 0, "correct", 0)
+        changed = json.loads(json.dumps(QUIZ))
+        changed["categories"][0]["questions"][1]["question"] = "Changed"
+        resp = self.upload(changed)
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(resp.get_json()["created"])
+        self.assertIn("Q2", self.client.get("/q/0/1").get_data(as_text=True))
+        self.assertEqual(self.game.state["scores"], [100, 0])
+        self.start("test", ["A", "B"], confirm="yes")
+        self.assertIn("Changed", self.client.get("/q/0/1").get_data(as_text=True))
+
+    def test_deleting_a_quiz_keeps_games(self):
+        self.judge(0, 0, "correct", 1)
+        self.assertEqual(self.client.delete("/api/quizzes/test").status_code, 204)
+        self.assertEqual(self.client.delete("/api/quizzes/test").status_code, 404)
+        self.assertIn("Q1", self.client.get("/q/0/0").get_data(as_text=True))  # still playable
+        self.make_client()
+        self.assertEqual(self.game.state["scores"], [0, 100])
+        self.assertIn("<strong>Test</strong>", self.client.get("/admin").get_data(as_text=True))
+
+    # --- JSON API ------------------------------------------------------------
+
+    def test_api_upload_list_and_download(self):
+        resp = self.upload({**QUIZ, "title": "Ny kviss", "slug": "ny-1"})
+        self.assertEqual(resp.status_code, 201)
+        self.assertEqual(resp.get_json()["slug"], "ny-1")
+        self.assertTrue(resp.get_json()["created"])
+        listing = self.client.get("/api/quizzes").get_json()
+        self.assertEqual([q["slug"] for q in listing], ["ny-1", "test"])
+        self.assertEqual(listing[1]["plays"], 1)
+        self.assertEqual(listing[1]["questions"], 3)
+        quiz = self.client.get("/api/quizzes/ny-1").get_json()
+        self.assertEqual(quiz["categories"], QUIZ["categories"])
+        self.assertEqual(self.upload(quiz).status_code, 200)  # round trip: same slug, replaced
+        self.assertEqual(self.client.get("/api/quizzes/nope").status_code, 404)
+
+    def test_api_rejects_bad_quizzes(self):
+        resp = self.client.post("/api/quizzes", data="{nope")
+        self.assertEqual(resp.status_code, 400)
+        resp = self.client.post("/api/quizzes", data="{nope", content_type="application/json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("invalid JSON", resp.get_json()["error"])
+        for quiz, message in [([], "object"), ({**QUIZ, "title": ""}, "'title'"),
+                              ({**QUIZ, "title": "!!"}, "slug"), ({**QUIZ, "slug": "Bad Slug"}, "'slug'"),
+                              ({**QUIZ, "categories": []}, "categories"), ({**QUIZ, "players": "A"}, "players")]:
+            resp = self.upload(quiz)
+            self.assertEqual(resp.status_code, 400, quiz)
+            self.assertIn(message, resp.get_json()["error"])
+        resp = self.client.post("/api/quizzes", data="[" * 100000, content_type="application/json")
+        self.assertEqual(resp.status_code, 400)
+
+    def test_api_needs_password(self):
+        client = self.make_client(password="s3cret")
+        self.assertEqual(client.get("/api/quizzes").status_code, 401)
+        self.assertEqual(self.upload(QUIZ, client).status_code, 401)
+        auth = {"Authorization": "Basic " + base64.b64encode(b":s3cret").decode()}
+        self.assertEqual(client.post("/api/quizzes", json=QUIZ, headers=auth).status_code, 200)
+        self.assertEqual(client.delete("/api/quizzes/test").status_code, 401)
+
+    def test_slugify(self):
+        self.assertEqual(slugify("Fredagskviss på Bærum!"), "fredagskviss-pa-baerum")
+        self.assertEqual(slugify("Øl & Café 2"), "ol-cafe-2")
+
+    # --- first start and command line ----------------------------------------
+
+    def test_quiz_files_imported_on_first_start_only(self):
+        self.db.unlink()
+        broken = self.tmp / "broken.json"
+        broken.write_text("{}")
+        with self.assertLogs("app", "WARNING") as logs:
+            self.make_client(seed=[BASE_DIR / "quiz.json", broken, self.tmp / "missing.json"])
+        self.assertIn("'title' is required", logs.output[0])
+        slugs = [q["slug"] for q in self.client.get("/api/quizzes").get_json()]
+        self.assertEqual(len(slugs), 1)
+        self.client.delete(f"/api/quizzes/{slugs[0]}")
+        self.make_client(seed=[BASE_DIR / "quiz.json"])  # empty again: imports again
+        self.assertEqual(len(self.client.get("/api/quizzes").get_json()), 1)
+        self.upload(QUIZ)
+        self.make_client(seed=[BASE_DIR / "quiz-example.json"])
+        self.assertEqual(len(self.client.get("/api/quizzes").get_json()), 2)  # library not empty: no import
+
+    def test_import_command(self):
+        path = self.tmp / "q.json"
+        path.write_text(json.dumps({**QUIZ, "title": "Fra fil"}))
+        out = io.StringIO()
+        with mock.patch.dict(os.environ, {"KVISS_DB": str(self.db), "KVISS_MEDIA": str(self.media)}), \
+                redirect_stdout(out):
+            self.assertEqual(main(["import", str(path)]), 0)
+            self.assertEqual(main(["import", str(path)]), 0)
+            with mock.patch("sys.stderr", io.StringIO()):
+                self.assertEqual(main(["import", str(self.tmp / "missing.json")]), 1)
+        self.assertIn("added 'fra-fil'", out.getvalue())
+        self.assertIn("replaced 'fra-fil'", out.getvalue())
+        self.assertIsNotNone(self.client.get("/api/quizzes/fra-fil").get_json())
 
 
 if __name__ == "__main__":

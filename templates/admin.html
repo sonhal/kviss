@@ -4,10 +4,18 @@
 {% block content %}
 <header class="topbar">
   <h1>Admin</h1>
-  <nav><a class="tool" href="{{ url_for('board') }}">← Brett</a></nav>
+  <nav>{% if game %}<a class="tool" href="{{ url_for('board') }}">← Brett</a>{% endif %}</nav>
 </header>
 
 <main class="admin">
+  <section>
+    <h2>Nytt spill</h2>
+    <p>{% if game %}På TV-en nå: <strong>{{ quiz.title }}</strong>, startet {{ game.started_at|when }}.
+      {% else %}Ingen spill pågår.{% endif %}</p>
+    <a class="tool" href="{{ url_for('new_game') }}">Velg kviss og deltakere →</a>
+  </section>
+
+  {% if game %}
   <section>
     <h2>Juster poeng</h2>
     {% for name in quiz.players %}
@@ -58,5 +66,22 @@
       <button class="bad">Nullstill spill</button>
     </form>
   </section>
+  {% endif %}
+
+  {% if past %}
+  <section>
+    <h2>Historikk</h2>
+    <ul class="history">
+      {% for g in past %}
+      <li>
+        <span class="muted">{{ g.started_at|when }}</span> <strong>{{ g.quiz.title }}</strong>
+        {% if not g.ended_at %}<span class="gold">(pågår)</span>{% endif %}
+        <span class="muted">{{ g.state.used|length }} av {{ g.total_questions() }} spilt</span><br>
+        {% for p in g.standings() %}{{ p.place }}. {{ p.name }} <strong>{{ p.score }}</strong>{% if not loop.last %} · {% endif %}{% endfor %}
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
 </main>
 {% endblock %}

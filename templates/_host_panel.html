@@ -1,5 +1,8 @@
 <div class="host-panel" data-version="{{ version }}">
-  {% if current %}
+  {% if not game %}
+  <p class="host-idle">Ingen spill pågår</p>
+  <p class="host-progress">Start et spill fra ⚙ Admin → Nytt spill.</p>
+  {% elif current %}
   <p class="host-meta">{{ current.category }} · <span class="gold">{{ current.q.value }}</span></p>
   <p class="host-question">{{ current.q.question }}</p>
   {% if current.q.youtube or current.q.audio %}
@@ -29,10 +32,12 @@
     Velg et spørsmål på TV-en, så dukker svaret opp her.</p>
   {% endif %}
 
+  {% if game %}
   <ul class="host-scores">
     {% for name in quiz.players %}
     {% set score = game.state.scores[loop.index0] %}
     <li><span>{{ name }}</span> <strong{% if score < 0 %} class="negative"{% endif %}>{{ score }}</strong></li>
     {% endfor %}
   </ul>
+  {% endif %}
 </div>
