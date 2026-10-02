@@ -227,6 +227,77 @@ HOST=0.0.0.0 .venv/bin/python app.py                      # reachable from your 
 .venv/bin/python -m unittest discover -s tests -t .      # tests
 ```
 
+## Run with Docker
+
+The image holds the app only. Everything that changes lives in **`/data`** inside the container, so mount a
+volume there:
+
+- `/data/kviss.db` is the database, with `kviss.db-wal` / `kviss.db-shm` next to it while the app runs. Mount the
+  **folder**, not just the `.db` file, because SQLite creates those extra files beside the database.
+- `/data/media/` holds audio files for music questions.
+
+Use the same environment variables as for systemd (`KVISS_PASSWORD`, `KVISS_TZ`, …). `KVISS_DB` and `KVISS_MEDIA`
+are already set to the paths above. On first start, an empty database imports `quiz.json` and `quiz-example.json`
+from the image, as described in [Managing quizzes](#managing-quizzes).
+
+### With Docker Compose
+
+```bash
+echo "KVISS_PASSWORD=$(openssl rand -base64 12)" > .env   # compose reads .env; it is in .gitignore
+docker compose up -d --build                              # http://127.0.0.1:8000
+docker compose logs -f
+```
+
+`compose.yaml` stores `/data` in a named volume, `kviss-data`, which survives `docker compose down`, rebuilds and
+image updates. Only `docker compose down -v` deletes it. The port is published on `127.0.0.1` only. Put Caddy in
+front for HTTPS: the site block in `deploy/kviss.caddy` works unchanged. Don't run the systemd service and the
+container at the same time, because both use port 8000.
+
+**Updating:** `git pull && docker compose up -d --build`. The volume, and with it every quiz and game, is kept.
+
+### With plain `docker run`
+
+```bash
+docker build -t kviss .
+docker run -d --name kviss --restart unless-stopped \
+  -p 127.0.0.1:8000:8000 -e KVISS_PASSWORD='your password' \
+  -v kviss-data:/data kviss
+```
+
+### Keeping the data in a folder on the host
+
+A **bind mount** is easier to back up and to copy audio files into than a named volume. The app runs as the
+unprivileged user `kviss` with **UID/GID 1000** inside the container, so that user must own the folder.
+Otherwise it stops with `sqlite3.OperationalError: unable to open database file`.
+
+```bash
+sudo mkdir -p /srv/kviss/media
+sudo chown -R 1000:1000 /srv/kviss
+docker run -d --name kviss --restart unless-stopped \
+  -p 127.0.0.1:8000:8000 -e KVISS_PASSWORD='your password' \
+  -v /srv/kviss:/data kviss
+```
+
+In `compose.yaml`, change `- kviss-data:/data` to `- /srv/kviss:/data`. To reuse the database from a systemd
+install, stop that service, copy `kviss.db` into the folder (with `kviss.db-wal`/`-shm` if they exist), and `chown`
+it as above. Add audio files with `sudo cp song.mp3 /srv/kviss/media/ && sudo chown 1000:1000 /srv/kviss/media/song.mp3`,
+or for a named volume use `docker cp song.mp3 kviss:/data/media/`.
+
+### Shell commands in the container
+
+```bash
+docker cp fredagskviss.json kviss:/tmp/
+docker exec kviss python app.py import /tmp/fredagskviss.json     # with compose: docker compose exec kviss ...
+
+# consistent backup while it runs, written into the volume
+docker exec kviss python -c "import sqlite3; sqlite3.connect('/data/kviss.db').backup(sqlite3.connect('/data/backup.db'))"
+docker cp kviss:/data/backup.db .
+```
+
+The container's health check counts any HTTP answer, including `401` from the password prompt, as healthy
+(`docker ps` shows `healthy`). The same single-gunicorn-worker rule from the security notes applies: run **one**
+container per database, and don't scale the service.
+
 ## Deploy to a VPS (systemd + venv + Caddy)
 
 These steps are for Debian 12 (bookworm) or newer, on a VPS that already runs Caddy for other sites.

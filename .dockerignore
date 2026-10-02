@@ -1,0 +1,16 @@
+.git
+.github
+.venv
+venv
+__pycache__
+*.pyc
+*.tmp
+state.json
+kviss.db
+kviss.db-*
+media
+tests
+deploy
+Dockerfile
+compose.yaml
+.dockerignore
