@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Nytt spill · {{ chosen.title }}{% endblock %}
+{% block body_class %}page-admin{% endblock %}
+{% block content %}
+<header class="topbar">
+  <h1>{{ chosen.title }}</h1>
+  <nav><a class="tool" href="{{ url_for('new_game') }}">← Velg kviss</a></nav>
+</header>
+
+<main class="admin">
+  <section>
+    <p class="muted">{{ chosen.categories|map(attribute='name')|join(' · ') }} ({{ chosen.questions }} spørsmål)</p>
+    <form method="post" class="players-form">
+      <label for="players"><h2>Deltakere</h2></label>
+      <p class="muted">Ett lag eller én person per linje.</p>
+      <textarea id="players" name="players" rows="4" required autofocus>{{ players }}</textarea>
+      {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+      {% if game and game.in_progress() %}
+      <label class="confirm"><input type="checkbox" name="confirm" value="yes" required>
+        Avslutt spillet som pågår ({{ game.quiz.title }}, {{ game.state.used|length }} av {{ game.total_questions() }}
+        spørsmål spilt). Det lagres i historikken.</label>
+      {% endif %}
+      <button class="start">Start spillet</button>
+    </form>
+  </section>
+</main>
+{% endblock %}

@@ -5,6 +5,9 @@
     {% if game.can_undo() %}
     <form method="post" action="{{ url_for('undo') }}"><button class="tool">↶ Angre</button></form>
     {% endif %}
+    {% if game.is_over() %}
+    <a class="tool" href="{{ url_for('new_game') }}">Nytt spill</a>
+    {% endif %}
     <a class="tool" href="{{ url_for('rules') }}">Regler</a>
     <a class="tool" href="{{ url_for('admin') }}">⚙</a>
   </nav>

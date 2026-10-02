@@ -548,3 +548,37 @@ a.cell:active { transform: scale(0.96); }
 .admin button { padding: 0 1em; }
 .music-list { padding-left: 1.2em; line-height: 1.6; }
 .reset { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin-top: 2rem !important; }
+
+/* --- new game, quiz list, history ------------------------------------- */
+
+.quiz-list, .history { list-style: none; padding: 0; margin: 0; }
+.quiz-list li { margin-bottom: 0.6rem; }
+.quiz-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.8rem 1rem;
+  border-radius: 6px;
+  background: var(--tile);
+}
+.quiz-pick:hover, .quiz-pick:active { background: var(--tile-hover); }
+.quiz-pick strong { color: var(--gold); font-size: 1.15em; }
+.players-form label h2 { margin-bottom: 0; }
+.players-form textarea {
+  display: block;
+  width: 100%;
+  margin-bottom: 1rem;
+  padding: 0.6rem;
+  border: 1px solid var(--muted);
+  border-radius: 6px;
+  background: var(--used);
+  color: var(--text);
+  font: inherit;
+  font-size: 18px; /* 16px+ stops iOS zooming in on focus */
+  line-height: 1.5;
+}
+.players-form .confirm { display: block; margin-bottom: 1rem; }
+.players-form .start { min-height: 2.6em; background: var(--ok); }
+.form-error { color: #ff8a80; font-weight: 700; }
+.history li { margin-bottom: 0.8rem; line-height: 1.5; }
+.history strong { color: var(--gold); }
