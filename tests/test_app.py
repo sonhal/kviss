@@ -134,6 +134,79 @@ class KvissTest(unittest.TestCase):
         with self.assertRaisesRegex(ConfigError, "players"):
             load_quiz(self.config)
 
+    # --- music questions ---------------------------------------------------
+
+    def music_quiz(self, *extra):
+        """Write a quiz whose first category has the given music questions; return a client."""
+        (self.tmp / "media").mkdir(exist_ok=True)
+        (self.tmp / "media" / "song.mp3").write_bytes(b"ID3" + bytes(range(256)) * 4)
+        quiz = json.loads(json.dumps(QUIZ))
+        for q in extra:
+            quiz["categories"][0]["questions"].append({"value": 300, "question": "Låt?", "answer": "Svar", **q})
+        self.config.write_text(json.dumps(quiz))
+        return self.make_client()
+
+    def assert_bad_music(self, fields, message):
+        with self.assertRaisesRegex(ConfigError, message):
+            self.music_quiz(fields)
+
+    def test_music_validation(self):
+        self.music_quiz({"youtube": "dQw4w9WgXcQ", "start": 30, "end": 45.5}, {"audio": "song.mp3"})
+        self.assert_bad_music({"youtube": "https://youtu.be/dQw4w9WgXcQ"}, "11-character video ID")
+        self.assert_bad_music({"youtube": "dQw4w9WgXc\"><x"}, "11-character video ID")
+        self.assert_bad_music({"youtube": "dQw4w9WgXcQ", "audio": "song.mp3"}, "not both")
+        self.assert_bad_music({"audio": "missing.mp3"}, "not found")
+        self.assert_bad_music({"audio": "../quiz.json"}, "must be one of")
+        self.assert_bad_music({"audio": "../media/song.mp3"}, "inside")
+        self.assert_bad_music({"audio": "/etc/song.mp3"}, "inside")
+        self.assert_bad_music({"youtube": "dQw4w9WgXcQ", "start": 20, "end": 10}, "'end'")
+        self.assert_bad_music({"youtube": "dQw4w9WgXcQ", "start": -1}, "'start'")
+        self.assert_bad_music({"youtube": "dQw4w9WgXcQ", "start": True}, "'start'")
+        self.assert_bad_music({"start": 10}, "needs 'youtube' or 'audio'")
+
+    def test_youtube_question_page(self):
+        client = self.music_quiz({"youtube": "dQw4w9WgXcQ", "start": 30, "end": 45})
+        page = client.get("/q/0/2").get_data(as_text=True)
+        self.assertIn('data-youtube="dQw4w9WgXcQ"', page)
+        self.assertIn('data-start="30" data-end="45"', page)
+        self.assertNotIn("<iframe", page)  # the player is created hidden by app.js
+        self.assertIn('class="clue-answer" hidden>Svar', page)
+        self.assertNotIn("class=\"music", client.get("/q/0/0").get_data(as_text=True))
+
+    def test_audio_question_and_media_route(self):
+        client = self.music_quiz({"audio": "song.mp3", "start": 5})
+        page = client.get("/q/0/2").get_data(as_text=True)
+        self.assertIn('data-audio="/media/song.mp3"', page)
+        self.assertIn('src="/media/song.mp3#t=5"', page)  # no-JS fallback starts at `start`
+        resp = client.get("/media/song.mp3", headers={"Range": "bytes=0-9"})
+        self.assertEqual(resp.status_code, 206)  # Safari needs Range support for audio
+        self.assertEqual(resp.data, b"ID3" + bytes(range(7)))
+        resp.close()
+        # Only files the quiz uses are served.
+        (self.tmp / "media" / "other.mp3").write_bytes(b"x")
+        self.assertEqual(client.get("/media/other.mp3").status_code, 404)
+        self.assertEqual(client.get("/media/../quiz.json").status_code, 404)
+
+    def test_audio_name_is_normalized(self):
+        client = self.music_quiz({"audio": "./song.mp3"})
+        self.assertIn('data-audio="/media/song.mp3"', client.get("/q/0/2").get_data(as_text=True))
+        resp = client.get("/media/song.mp3")
+        self.assertEqual(resp.status_code, 200)
+        resp.close()
+
+    def test_media_needs_password(self):
+        self.music_quiz({"audio": "song.mp3"})
+        client = self.make_client(password="s3cret")
+        self.assertEqual(client.get("/media/song.mp3").status_code, 401)
+
+    def test_music_on_host_view_and_admin(self):
+        client = self.music_quiz({"youtube": "dQw4w9WgXcQ", "start": 75, "end": 90})
+        client.get("/q/0/2")
+        self.assertIn("♪ YouTube dQw4w9WgXcQ,\n    1:15–1:30", client.get("/vert").get_data(as_text=True))
+        admin = client.get("/admin").get_data(as_text=True)
+        self.assertIn('href="/q/0/2"', admin)
+        self.assertIn("Svar", admin)
+
 
 if __name__ == "__main__":
     unittest.main()

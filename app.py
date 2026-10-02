@@ -10,16 +10,19 @@ import hashlib
 import json
 import mimetypes
 import os
+import re
 import secrets
 import threading
 from pathlib import Path
 from urllib.parse import urlparse
 
-from flask import Flask, Response, abort, redirect, render_template, request, url_for
+from flask import Flask, Response, abort, redirect, render_template, request, send_from_directory, url_for
 
 BASE_DIR = Path(__file__).resolve().parent
 mimetypes.add_type("application/manifest+json", ".webmanifest")
 UNDO_LIMIT = 50
+YOUTUBE_ID = re.compile(r"[A-Za-z0-9_-]{11}")
+AUDIO_TYPES = {".mp3", ".m4a", ".aac", ".wav"}  # formats both Safari and Chrome play
 
 
 class ConfigError(ValueError):
@@ -31,9 +34,46 @@ def _require(cond, msg):
         raise ConfigError(msg)
 
 
+def _is_seconds(v):
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and v >= 0
+
+
+def _check_music(q, where, media_dir):
+    """Validate the optional music fields of a question. Returns the audio file name, if any."""
+    youtube, audio = q.get("youtube"), q.get("audio")
+    if youtube is None and audio is None:
+        for field in ("start", "end"):
+            _require(field not in q, f"{where}: '{field}' needs 'youtube' or 'audio'")
+        return None
+    _require(youtube is None or audio is None, f"{where}: use either 'youtube' or 'audio', not both")
+    if youtube is not None:
+        _require(isinstance(youtube, str) and YOUTUBE_ID.fullmatch(youtube),
+                 f"{where}: 'youtube' must be an 11-character video ID like 'dQw4w9WgXcQ' "
+                 f"(the part after v= in the link), got {youtube!r}")
+    else:
+        _require(isinstance(audio, str) and audio.strip(), f"{where}: 'audio' must be a file name")
+        _require(Path(audio).suffix.lower() in AUDIO_TYPES,
+                 f"{where}: 'audio' must be one of {', '.join(sorted(AUDIO_TYPES))}, got {audio!r}")
+        file = (media_dir / audio).resolve()
+        _require(".." not in Path(audio).parts and file.is_relative_to(media_dir.resolve()),
+                 f"{where}: 'audio' must be inside {media_dir}")
+        q["audio"] = audio = Path(audio).as_posix()  # "./a.mp3" -> "a.mp3", the path browsers request
+        _require(file.is_file(), f"{where}: audio file not found: {media_dir / audio}")
+    start, end = q.get("start", 0), q.get("end")
+    _require(_is_seconds(start), f"{where}: 'start' must be a number of seconds (0 or more)")
+    _require(end is None or (_is_seconds(end) and end > start),
+             f"{where}: 'end' must be a number of seconds after 'start'")
+    return audio
+
+
 def load_quiz(path):
-    """Read and validate the quiz file. Raises ConfigError with a readable message."""
+    """Read and validate the quiz file. Raises ConfigError with a readable message.
+
+    Local audio files for music questions live in a 'media' folder next to the quiz file.
+    """
     path = Path(path)
+    media_dir = path.parent / "media"
+    audio_files = set()
     raw = path.read_bytes()
     try:
         data = json.loads(raw)
@@ -67,11 +107,16 @@ def load_quiz(path):
                      f"{qwhere}: 'value' must be a positive integer")
             for field in ("question", "answer"):
                 _require(isinstance(q.get(field), str) and q[field].strip(), f"{qwhere}: '{field}' is required")
+            audio = _check_music(q, qwhere, media_dir)
+            if audio:
+                audio_files.add(audio)
 
     return {
         "title": title,
         "players": players,
         "categories": categories,
+        "media_dir": media_dir,
+        "audio_files": audio_files,  # the only files /media/ will serve
         # Changing the quiz file invalidates any saved game state.
         "fingerprint": hashlib.sha256(raw).hexdigest(),
     }
@@ -233,6 +278,11 @@ def create_app(config_path=None, state_path=None, password=None):
             if origin and urlparse(origin).netloc != request.host:
                 abort(403)
 
+    @app.template_filter("mmss")
+    def mmss(seconds):
+        seconds = int(seconds)
+        return f"{seconds // 60}:{seconds % 60:02d}"
+
     @app.context_processor
     def inject():
         return {"game": game, "quiz": game.quiz}
@@ -299,6 +349,14 @@ def create_app(config_path=None, state_path=None, password=None):
         resp = Response(render_template("_host_panel.html", **host_context()))
         resp.headers["Cache-Control"] = "no-store"
         return resp
+
+    @app.get("/media/<path:name>")
+    def media(name):
+        # Only files the quiz refers to; send_from_directory also refuses paths outside
+        # the folder. It answers Range requests, which Safari needs to play and seek audio.
+        if name not in game.quiz["audio_files"]:
+            abort(404)
+        return send_from_directory(game.quiz["media_dir"], name)
 
     @app.get("/admin")
     def admin():

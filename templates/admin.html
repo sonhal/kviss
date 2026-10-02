@@ -28,6 +28,24 @@
       for å se svaret på spørsmålet som vises på TV-en. Den oppdateres automatisk og kan ikke endre spillet.</p>
   </section>
 
+  {% set music = [] %}
+  {% for cat in quiz.categories %}{% set c = loop.index0 %}
+    {% for q in cat.questions %}{% if q.youtube or q.audio %}{% set _ = music.append((c, loop.index0, cat.name, q)) %}{% endif %}{% endfor %}
+  {% endfor %}
+  {% if music %}
+  <section>
+    <h2>Musikk</h2>
+    <p>Test at alle klippene spiller før spillet starter. Å åpne et spørsmål endrer ikke poengene.</p>
+    <ul class="music-list">
+      {% for c, r, name, q in music %}
+      <li><a class="gold" href="{{ url_for('question', c=c, r=r) }}">{{ name }} · {{ q.value }}</a>
+        {{ q.answer }} <span class="muted">({% if q.youtube %}YouTube {{ q.youtube }}{% else %}{{ q.audio }}{% endif %},
+        {{ (q.start or 0)|mmss }}–{% if q.end %}{{ q.end|mmss }}{% else %}slutt{% endif %})</span></li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
   <section>
     <h2>Spill</h2>
     <p>{{ game.state.used|length }} av {{ game.total_questions() }} spørsmål spilt.</p>

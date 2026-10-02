@@ -8,6 +8,26 @@
 
 <main class="clue">
   <p class="clue-text">{{ q.question }}</p>
+  {% if q.youtube or q.audio %}
+  {# Music: app.js drives playback with the buttons. The YouTube video is never shown. #}
+  <div class="music" data-start="{{ q.start or 0 }}"{% if q.end %} data-end="{{ q.end }}"{% endif %}
+       {% if q.youtube %}data-youtube="{{ q.youtube }}"{% else %}data-audio="{{ url_for('media', name=q.audio) }}"{% endif %}>
+    <div class="music-controls" hidden>
+      <button type="button" class="music-play" disabled>▶ Spill av</button>
+      <button type="button" class="music-restart" disabled>↺ Fra start</button>
+    </div>
+    <div class="music-progress" hidden><span></span></div>
+    <p class="music-status" hidden></p>
+    {# No-JS fallbacks, removed by app.js. #}
+    {% if q.youtube %}
+    <a class="music-fallback tool" href="https://www.youtube.com/watch?v={{ q.youtube }}&amp;t={{ (q.start or 0)|int }}s"
+       target="_blank" rel="noopener noreferrer">Åpne på YouTube (viser videoen)</a>
+    {% else %}
+    <audio class="music-fallback" controls preload="metadata"
+           src="{{ url_for('media', name=q.audio) }}#t={{ q.start or 0 }}{% if q.end %},{{ q.end }}{% endif %}"></audio>
+    {% endif %}
+  </div>
+  {% endif %}
   {# The answer is always in the page; app.js reveals it in place. The link is the no-JS fallback. #}
   <p class="clue-answer"{% if not reveal %} hidden{% endif %}>{{ q.answer }}</p>
   {% if not reveal %}

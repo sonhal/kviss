@@ -45,6 +45,156 @@
     });
   }
 
+  // --- Music questions: play a clip from a local file or a hidden YouTube video -
+  // Both sources sit behind the same small interface, so the buttons, the stop
+  // at `end` and the progress bar work the same way for each.
+  const music = document.querySelector(".music");
+  if (music) {
+    const start = Number(music.dataset.start) || 0;
+    const end = music.dataset.end ? Number(music.dataset.end) : null;
+    const playBtn = music.querySelector(".music-play");
+    const restartBtn = music.querySelector(".music-restart");
+    const bar = music.querySelector(".music-progress");
+    const status = music.querySelector(".music-status");
+    let player = null; // { play, pause, seek(t), time(), duration(), playing() }
+
+    music.querySelectorAll(".music-fallback").forEach((el) => el.remove());
+    music.querySelector(".music-controls").hidden = false;
+
+    const say = (text) => { status.textContent = text; status.hidden = !text; };
+    const stopAt = () => end ?? (player.duration() || null);
+
+    const paint = () => {
+      if (!player) return;
+      playBtn.textContent = player.playing() ? "❚❚ Pause" : "▶ Spill av";
+      const stop = stopAt();
+      if (stop > start) {
+        const p = Math.min(1, Math.max(0, (player.time() - start) / (stop - start)));
+        bar.hidden = false;
+        bar.firstElementChild.style.width = `${p * 100}%`;
+      }
+    };
+
+    setInterval(() => {
+      if (!player || !player.playing()) return;
+      if (end !== null && player.time() >= end) player.pause();
+      paint();
+    }, 200);
+
+    const play = () => {
+      const stop = stopAt();
+      // Start over if the clip already played to its end (or is before its start).
+      if (player.time() < start - 0.5 || (stop && player.time() >= stop - 0.3)) player.seek(start);
+      say("");
+      player.play();
+    };
+    const toggle = () => { if (!player) return; player.playing() ? player.pause() : play(); paint(); };
+
+    const ready = (p) => {
+      player = p;
+      playBtn.disabled = restartBtn.disabled = false;
+      say("");
+    };
+
+    playBtn.addEventListener("click", toggle);
+    restartBtn.addEventListener("click", () => {
+      if (!player) return;
+      player.seek(start);
+      play();
+      paint();
+    });
+    // Space bar plays/pauses (handy with a Mac on HDMI).
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== " " || e.target.closest("button, a, input")) return;
+      e.preventDefault();
+      toggle();
+    });
+
+    if (music.dataset.audio) {
+      // The #t= media fragment makes the first play begin at `start`, even on an
+      // iPhone that has not loaded the file yet (so seeking is not possible).
+      const el = new Audio(`${music.dataset.audio}#t=${start}`);
+      el.preload = "auto";
+      el.addEventListener("error", () => say("Fant ikke lydfilen."));
+      ["play", "pause", "ended", "loadedmetadata"].forEach((ev) => el.addEventListener(ev, paint));
+      ready({
+        play: () => el.play().catch(() => say("Lyden startet ikke. Trykk ▶ igjen.")),
+        pause: () => el.pause(),
+        seek: (t) => { el.currentTime = t; },
+        time: () => el.currentTime,
+        duration: () => (Number.isFinite(el.duration) ? el.duration : 0),
+        playing: () => !el.paused,
+      });
+    } else {
+      say("Laster …");
+      const ERRORS = {
+        2: "Ugyldig YouTube-ID.",
+        5: "YouTube-videoen kan ikke spilles i nettleseren.",
+        100: "YouTube-videoen finnes ikke eller er privat.",
+        101: "Eieren tillater ikke at denne videoen spilles utenfor YouTube.",
+        150: "Eieren tillater ikke at denne videoen spilles utenfor YouTube.",
+      };
+      // The player must exist in the page to play, so it is made invisible instead:
+      // the embed shows the video title (often the answer) and must never be seen.
+      const holder = document.createElement("div");
+      holder.className = "music-yt";
+      holder.setAttribute("aria-hidden", "true");
+      holder.appendChild(document.createElement("div"));
+      music.appendChild(holder);
+
+      const create = () => {
+        let yt;
+        let checkStart = null;
+        const state = () => (yt && yt.getPlayerState ? yt.getPlayerState() : -1);
+        yt = new YT.Player(holder.firstElementChild, {
+          host: "https://www.youtube-nocookie.com",
+          width: 200,
+          height: 200,
+          videoId: music.dataset.youtube,
+          playerVars: {
+            start: Math.floor(start), controls: 0, disablekb: 1, fs: 0, rel: 0,
+            playsinline: 1, iv_load_policy: 3, origin: location.origin,
+          },
+          events: {
+            onReady: () => ready({
+              play: () => {
+                yt.playVideo();
+                // Browsers may block playback; tell the host instead of failing silently.
+                clearTimeout(checkStart);
+                checkStart = setTimeout(() => {
+                  if (![YT.PlayerState.PLAYING, YT.PlayerState.BUFFERING].includes(state())) {
+                    say("Starter ikke? Trykk ▶ igjen.");
+                  }
+                }, 4000);
+              },
+              pause: () => yt.pauseVideo(),
+              seek: (t) => yt.seekTo(t, true),
+              time: () => yt.getCurrentTime() || 0,
+              duration: () => yt.getDuration() || 0,
+              playing: () => [YT.PlayerState.PLAYING, YT.PlayerState.BUFFERING].includes(state()),
+            }),
+            onStateChange: paint,
+            onError: (e) => {
+              clearTimeout(checkStart);
+              say(ERRORS[e.data] || `YouTube-feil ${e.data}.`);
+            },
+          },
+        });
+      };
+
+      if (window.YT && window.YT.Player) {
+        create();
+      } else {
+        const previous = window.onYouTubeIframeAPIReady;
+        window.onYouTubeIframeAPIReady = () => { if (previous) previous(); create(); };
+        const script = document.createElement("script");
+        script.src = "https://www.youtube.com/iframe_api";
+        script.onerror = () => say("Fikk ikke kontakt med YouTube.");
+        document.head.appendChild(script);
+      }
+    }
+  }
+
   // --- Judge buttons: no double submits, a little haptic feedback -----------
   document.addEventListener("submit", (e) => {
     const form = e.target;

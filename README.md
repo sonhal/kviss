@@ -16,7 +16,12 @@ The screens are in Norwegian (bokmål); code, config keys and docs are in Englis
   live, updating about a second after you open a question. It shows the question, the answer in large text, who
   has answered wrong and the scores. It is read-only: it has no buttons and can't change the game.
   Log in with the same password. The link is also on the admin page.
-- **Admin** (`⚙`, `/admin`): adjust scores by hand, undo, and reset the game.
+- **Music questions**: the question screen gets **▶ Spill av** / **❚❚ Pause** and **↺ Fra start** buttons
+  (the space bar also plays and pauses) and plays a clip from a YouTube video or a local audio file. The YouTube
+  video is never shown, only heard: the player is invisible because its title is often the answer.
+  See [Music questions](#music-questions).
+- **Admin** (`⚙`, `/admin`): adjust scores by hand, undo, and reset the game. It also lists every music
+  question, so you can test that each clip plays before the game.
 - **Undo** reverts the last scoring action (up to 50 steps), for when you mis-tap.
 - When every question has been played, the board switches to a **Kahoot-style podium**. **You control the
   reveal:** tap the screen (or the pulsing **Avslør …** button) to raise 3rd place, tap again for 2nd, and once
@@ -68,6 +73,41 @@ questions. Missing slots show as blank tiles. Up to about 6 categories × 5 ques
 
 The app checks the file at startup and stops with a clear message if something is wrong, for example
 `category 'Science', question #3: 'answer' is required`.
+
+### Music questions
+
+Add `youtube` **or** `audio` to a question to make it a music question. The question and answer work as usual:
+one clip is one question, and the host judges it like any other.
+
+```json
+{ "value": 300, "question": "Hvem er artisten?", "answer": "Kygo",
+  "youtube": "dQw4w9WgXcQ", "start": 42, "end": 57 },
+{ "value": 400, "question": "Hva heter låta?", "answer": "Take On Me",
+  "audio": "take-on-me.mp3", "start": 0, "end": 20 }
+```
+
+- `youtube`: the 11-character **video ID**, i.e. the part after `v=` in `https://www.youtube.com/watch?v=dQw4w9WgXcQ`
+  (or after `youtu.be/`). A whole link is rejected.
+- `audio`: a file name in the `media/` folder **next to the quiz file** (e.g. `/opt/kviss/media/take-on-me.mp3`).
+  Sub-folders are fine (`"audio": "80s/take-on-me.mp3"`). Formats: `.mp3`, `.m4a`, `.aac`, `.wav`.
+  `media/` is in `.gitignore`, so copy the files to the server yourself (e.g. with `scp`).
+- `start` / `end` (optional): seconds into the song. Playback begins at `start` (default 0) and stops at
+  `end` (default: the end of the song). **Spill av** after the clip has ended, or **Fra start**, plays it again
+  from `start`.
+
+The app checks this at startup: an unknown file, a link instead of an ID, or `end` before `start` stops it
+with a clear message. The host view (`/vert`) shows which clip is playing, but never plays audio itself.
+
+Things to know about YouTube:
+
+- Some videos, often official label/VEVO uploads, **can't be played outside YouTube**. The question screen
+  then says so ("Eieren tillater ikke …"). Test every clip from the list on the admin page before the game,
+  and pick another upload (e.g. a "lyrics" or "topic" video) if one fails.
+- Monetised videos can play an **ad** before the song, which the room will hear. Being logged in to
+  YouTube Premium in that browser avoids it. Local files have no ads and are the most reliable option.
+- YouTube's API terms do not allow an invisible player. That is the trade-off for never showing the title.
+- Music needs JavaScript. Without it, an audio file falls back to the browser's own player (starting at
+  `start`), and a YouTube question shows an "Åpne på YouTube" link that *does* show the video.
 
 ### Prompt for generating questions with an AI
 
@@ -147,6 +187,9 @@ password is the one in `/etc/kviss.env`.
 - POSTs whose `Origin` header points at a different site are rejected, which blocks cross-site form
   attacks (CSRF) from other pages open in the same browser.
 - All quiz text goes through Jinja's auto-escaping, so HTML in a question cannot inject scripts.
+- A `youtube` value must be exactly an 11-character ID (`A-Z a-z 0-9 _ -`), so the quiz file can't point the
+  player at anything else. `/media/` serves only the audio files the quiz names, from inside the `media/`
+  folder, and is behind the same password as everything else.
 - The systemd unit runs as an unprivileged user with a read-only filesystem except for `/opt/kviss`.
 - The app deliberately runs a **single** gunicorn worker. State lives in memory in that one process, so do not raise `--workers`.
 
@@ -155,6 +198,9 @@ password is the one in `/etc/kviss.env`.
 - Hold the phone in **landscape**. The layout is sized for a 16:9 TV.
 - Turn off auto-lock and auto-rotate. Screen-mirroring (AirPlay/Chromecast) mirrors your whole phone,
   so silence notifications (Do Not Disturb).
+- **Sound on the TV:** AirPlay mirroring from an **iPhone** sends the sound to the TV automatically. From a
+  **Mac** (AirPlay or HDMI), check that the TV is selected as the sound output (Control Center → Sound) and
+  that its volume is up. Play a clip from the admin list before the guests arrive.
 - **Add to Home Screen** and open Kviss from that icon. It then runs full screen in landscape, with no address bar on the TV.
 
 ## Ideas for after the MVP

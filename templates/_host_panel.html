@@ -2,6 +2,11 @@
   {% if current %}
   <p class="host-meta">{{ current.category }} · <span class="gold">{{ current.q.value }}</span></p>
   <p class="host-question">{{ current.q.question }}</p>
+  {% if current.q.youtube or current.q.audio %}
+  {% set q = current.q %}
+  <p class="host-music">♪ {% if q.youtube %}YouTube {{ q.youtube }}{% else %}{{ q.audio }}{% endif %},
+    {{ (q.start or 0)|mmss }}–{% if q.end %}{{ q.end|mmss }}{% else %}slutt{% endif %}</p>
+  {% endif %}
   <p class="host-label">Svar</p>
   <p class="host-answer">{{ current.q.answer }}</p>
   {% if current.used %}
