@@ -11,6 +11,7 @@ The screens are in Norwegian (bokmål); code, config keys and docs are in Englis
   - ✓ adds the question's value and sends you back to the board.
   - ✗ subtracts the value. That player is locked out of the question and the others can still try.
   - **Nobody** closes the question with no change to any score.
+- **Regler** (`/regler`): a one-screen summary of the rules in Norwegian for the contestants, linked from the top bar.
 - **Admin** (`⚙`, `/admin`): adjust scores by hand, undo, and reset the game.
 - **Undo** reverts the last scoring action (up to 50 steps), for when you mis-tap.
 - When every question has been played, the board switches to a **Kahoot-style podium**. **You control the

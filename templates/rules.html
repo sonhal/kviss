@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Regler · {{ quiz.title }}{% endblock %}
+{% block body_class %}page-rules{% endblock %}
+{% block content %}
+<header class="topbar">
+  <h1>Slik spiller vi</h1>
+  <nav><a class="tool" href="{{ url_for('board') }}">← Brett</a></nav>
+</header>
+
+<main class="rules">
+  <ol class="rule-cards">
+    <li class="rule">
+      <span class="rule-icon" aria-hidden="true">🎯</span>
+      <h2>Velg</h2>
+      <p>Velg en kategori og en poengverdi. Jo høyere verdi, jo vanskeligere spørsmål.</p>
+    </li>
+    <li class="rule">
+      <span class="rule-icon" aria-hidden="true">✋</span>
+      <h2>Svar</h2>
+      <p>Rekk opp hånda for å svare. Programlederen avgjør hvem som var først.</p>
+    </li>
+    <li class="rule rule-ok">
+      <span class="rule-icon" aria-hidden="true">✓</span>
+      <h2>Riktig</h2>
+      <p>Du får poengene, og du velger neste spørsmål.</p>
+    </li>
+    <li class="rule rule-bad">
+      <span class="rule-icon" aria-hidden="true">✗</span>
+      <h2>Feil</h2>
+      <p>Poengene trekkes fra, og du kan ikke svare igjen. De andre får prøve. Minuspoeng er mulig!</p>
+    </li>
+    <li class="rule">
+      <span class="rule-icon" aria-hidden="true">🤷</span>
+      <h2>Ingen</h2>
+      <p>Svarer ingen riktig, vises svaret og ingen får poeng.</p>
+    </li>
+    <li class="rule rule-win">
+      <span class="rule-icon" aria-hidden="true">🏆</span>
+      <h2>Vinner</h2>
+      <p>Når brettet er tomt, vinner den med flest poeng.</p>
+    </li>
+  </ol>
+
+  <p class="rules-facts">
+    {{ quiz.categories|length }} kategorier · {{ values|length }} spørsmål ·
+    {{ values|min }}–{{ values|max }} poeng · {{ quiz.players|length }} deltakere
+  </p>
+</main>
+{% endblock %}

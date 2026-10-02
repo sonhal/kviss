@@ -108,6 +108,12 @@ class KvissTest(unittest.TestCase):
         resp = client.post("/undo", headers={**auth, "Origin": "https://evil.example"})
         self.assertEqual(resp.status_code, 403)
 
+    def test_rules_page(self):
+        page = self.client.get("/regler").get_data(as_text=True)
+        self.assertIn("Slik spiller vi", page)
+        self.assertIn("2 kategorier · 3 spørsmål", page)
+        self.assertIn('href="/regler"', self.client.get("/").get_data(as_text=True))
+
     def test_bad_config_message(self):
         self.config.write_text(json.dumps({**QUIZ, "players": []}))
         with self.assertRaisesRegex(ConfigError, "players"):

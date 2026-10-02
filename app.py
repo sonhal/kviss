@@ -254,6 +254,11 @@ def create_app(config_path=None, state_path=None, password=None):
         reveal = {"reveal": "1"} if request.form.get("reveal") == "1" else {}
         return redirect(url_for("question", c=c, r=r, **reveal))
 
+    @app.get("/regler")
+    def rules():
+        values = [q["value"] for cat in game.quiz["categories"] for q in cat["questions"]]
+        return render_template("rules.html", values=values)
+
     @app.get("/admin")
     def admin():
         return render_template("admin.html")
