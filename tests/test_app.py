@@ -339,8 +339,8 @@ class KvissTest(unittest.TestCase):
         self.assertEqual(self.client.get("/api/quizzes/nope").status_code, 404)
 
     def test_api_rejects_bad_quizzes(self):
-        resp = self.client.post("/api/quizzes", data=json.dumps(QUIZ))  # form content type
-        self.assertEqual(resp.status_code, 415)
+        resp = self.client.post("/api/quizzes", data="{nope")
+        self.assertEqual(resp.status_code, 400)
         resp = self.client.post("/api/quizzes", data="{nope", content_type="application/json")
         self.assertEqual(resp.status_code, 400)
         self.assertIn("invalid JSON", resp.get_json()["error"])
@@ -352,17 +352,14 @@ class KvissTest(unittest.TestCase):
             self.assertIn(message, resp.get_json()["error"])
         resp = self.client.post("/api/quizzes", data="[" * 100000, content_type="application/json")
         self.assertEqual(resp.status_code, 400)
-        resp = self.client.post("/api/quizzes", data=b"x" * (3 * 1024 * 1024), content_type="application/json")
-        self.assertEqual(resp.status_code, 413)
 
-    def test_api_needs_password_and_same_origin(self):
+    def test_api_needs_password(self):
         client = self.make_client(password="s3cret")
         self.assertEqual(client.get("/api/quizzes").status_code, 401)
         self.assertEqual(self.upload(QUIZ, client).status_code, 401)
         auth = {"Authorization": "Basic " + base64.b64encode(b":s3cret").decode()}
         self.assertEqual(client.post("/api/quizzes", json=QUIZ, headers=auth).status_code, 200)
-        resp = client.delete("/api/quizzes/test", headers={**auth, "Origin": "https://evil.example"})
-        self.assertEqual(resp.status_code, 403)
+        self.assertEqual(client.delete("/api/quizzes/test").status_code, 401)
 
     def test_slugify(self):
         self.assertEqual(slugify("Fredagskviss på Bærum!"), "fredagskviss-pa-baerum")

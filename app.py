@@ -35,7 +35,6 @@ mimetypes.add_type("application/manifest+json", ".webmanifest")
 UNDO_LIMIT = 50
 MAX_PLAYERS = 20
 MAX_NAME = 40
-MAX_UPLOAD = 2 * 1024 * 1024  # bytes; a big quiz is a few tens of kB
 YOUTUBE_ID = re.compile(r"[A-Za-z0-9_-]{11}")
 SLUG = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 AUDIO_TYPES = {".mp3", ".m4a", ".aac", ".wav"}  # formats both Safari and Chrome play
@@ -488,7 +487,6 @@ def create_app(db_path=None, password=None, media_dir=None, seed=None):
         tz = timezone.utc
 
     app = Flask(__name__)
-    app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD
     store = Store(db_path)
     if store.is_empty():
         for path in seed:
@@ -507,8 +505,8 @@ def create_app(db_path=None, password=None, media_dir=None, seed=None):
             given = (auth.password or "") if auth else ""
             if not secrets.compare_digest(given.encode(), password.encode()):
                 return Response("Innlogging kreves", 401, {"WWW-Authenticate": 'Basic realm="kviss"'})
-        # Reject cross-site requests that change things (CSRF): browsers send Origin on them.
-        if request.method not in ("GET", "HEAD", "OPTIONS"):
+        # Reject cross-site form posts (CSRF): browsers send Origin on POST.
+        if request.method == "POST":
             origin = request.headers.get("Origin")
             if origin and urlparse(origin).netloc != request.host:
                 abort(403)
@@ -667,8 +665,7 @@ def create_app(db_path=None, password=None, media_dir=None, seed=None):
         return redirect(url_for("board"))
 
     # --- JSON API for the quiz library ---------------------------------------
-    # Same password as the rest. Uploads must be sent as application/json: browsers
-    # can't send that cross-site without a CORS preflight, which this app never allows.
+    # Same password as the rest of the app; anything beyond that is up to the proxy in front.
 
     def api_error(message, status):
         return jsonify(error=message), status
@@ -684,8 +681,6 @@ def create_app(db_path=None, password=None, media_dir=None, seed=None):
 
     @app.post("/api/quizzes")
     def api_save_quiz():
-        if request.mimetype != "application/json":
-            return api_error("send the quiz as JSON with 'Content-Type: application/json'", 415)
         try:
             data = json.loads(request.get_data())
         except (json.JSONDecodeError, UnicodeDecodeError) as e:

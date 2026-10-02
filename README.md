@@ -82,7 +82,6 @@ curl -u ":$PW" -X DELETE "$URL/api/quizzes/fredagskviss"  # 204; old games keep 
 
 A rejected upload returns a message like
 `{"error": "category 'Sport', question #3: 'answer' is required"}` and changes nothing.
-Uploads must be sent as `application/json` and be under 2 MB.
 
 You can also import files from a shell on the server. Run it as the `kviss` user so the database keeps the right
 owner:
@@ -290,10 +289,9 @@ folder), `KVISS_CONFIG` (quiz imported on first start) and `KVISS_TZ` (time zone
   Without HTTPS, the Basic Auth password would travel in plain text.
 - POSTs whose `Origin` header points at a different site are rejected, which blocks cross-site form
   attacks (CSRF) from other pages open in the same browser.
-- The quiz API needs the password like every other page. Uploads must be `Content-Type: application/json`.
-  A page on another site can't send that to kviss without a CORS preflight, which kviss never answers, so the browser
-  refuses. Changing requests with a foreign `Origin` header are rejected too (both POST and DELETE).
-  Uploads are limited to 2 MB and checked in full before anything is written.
+- The quiz API needs the password like every other page. Further protection of `/api/` (rate limits, request
+  size, IP allow-lists) belongs in the Caddy config in front of the app. An upload is checked in full before
+  anything is written.
 - The database is only reached through parameterised SQL queries, so quiz text can't alter a query.
 - All quiz text goes through Jinja's auto-escaping, so HTML in a question cannot inject scripts.
 - A `youtube` value must be exactly an 11-character ID (`A-Z a-z 0-9 _ -`), so the quiz file can't point the
