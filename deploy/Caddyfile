@@ -1,0 +1,6 @@
+# /etc/caddy/Caddyfile - Caddy fetches and renews a Let's Encrypt certificate automatically.
+# Point a DNS A record for this name at your VPS first.
+kviss.example.com {
+	encode gzip
+	reverse_proxy 127.0.0.1:8000
+}

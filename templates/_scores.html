@@ -1,0 +1,9 @@
+<footer class="scores">
+  {% for name in quiz.players %}
+  {% set score = game.state.scores[loop.index0] %}
+  <div class="score">
+    <span class="score-name">{{ name }}</span>
+    <span class="score-value{% if score < 0 %} negative{% endif %}">{{ score }}</span>
+  </div>
+  {% endfor %}
+</footer>

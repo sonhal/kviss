@@ -1,0 +1,56 @@
+{
+  "title": "Kviss",
+  "players": ["Team Red", "Team Blue", "Team Green"],
+  "categories": [
+    {
+      "name": "Geography",
+      "questions": [
+        { "value": 100, "question": "This is the capital of Norway.", "answer": "Oslo" },
+        { "value": 200, "question": "This river is the longest in Europe.", "answer": "The Volga" },
+        { "value": 300, "question": "This country has the most islands in the world.", "answer": "Sweden" },
+        { "value": 400, "question": "This is the smallest country in the world by area.", "answer": "Vatican City" },
+        { "value": 500, "question": "This lake is the deepest in the world.", "answer": "Lake Baikal" }
+      ]
+    },
+    {
+      "name": "Science",
+      "questions": [
+        { "value": 100, "question": "H2O is the chemical formula for this.", "answer": "Water" },
+        { "value": 200, "question": "This planet is known as the Red Planet.", "answer": "Mars" },
+        { "value": 300, "question": "This is the hardest natural substance.", "answer": "Diamond" },
+        { "value": 400, "question": "This scientist proposed the theory of general relativity.", "answer": "Albert Einstein" },
+        { "value": 500, "question": "This element has the chemical symbol W.", "answer": "Tungsten" }
+      ]
+    },
+    {
+      "name": "Movies",
+      "questions": [
+        { "value": 100, "question": "This green ogre lives in a swamp.", "answer": "Shrek" },
+        { "value": 200, "question": "\"I'll be back\" was said by this actor as the Terminator.", "answer": "Arnold Schwarzenegger" },
+        { "value": 300, "question": "This 1997 film about a sinking ship won 11 Oscars.", "answer": "Titanic" },
+        { "value": 400, "question": "This director made Jaws, E.T. and Jurassic Park.", "answer": "Steven Spielberg" },
+        { "value": 500, "question": "In The Matrix, Neo takes a pill of this colour.", "answer": "Red" }
+      ]
+    },
+    {
+      "name": "Food",
+      "questions": [
+        { "value": 100, "question": "Guacamole is made mainly from this fruit.", "answer": "Avocado" },
+        { "value": 200, "question": "This Italian cheese is traditionally used on a Margherita pizza.", "answer": "Mozzarella" },
+        { "value": 300, "question": "Sushi rice is seasoned with this type of vinegar.", "answer": "Rice vinegar" },
+        { "value": 400, "question": "This spice, from a crocus flower, is the most expensive by weight.", "answer": "Saffron" },
+        { "value": 500, "question": "Brunost, the Norwegian brown cheese, gets its colour from this process.", "answer": "Caramelising the milk sugars (boiling the whey)" }
+      ]
+    },
+    {
+      "name": "Music",
+      "questions": [
+        { "value": 100, "question": "This band sang \"Take On Me\".", "answer": "a-ha" },
+        { "value": 200, "question": "This instrument has 88 keys.", "answer": "Piano" },
+        { "value": 300, "question": "This 'King of Pop' released Thriller.", "answer": "Michael Jackson" },
+        { "value": 400, "question": "This Swedish group won Eurovision in 1974 with \"Waterloo\".", "answer": "ABBA" },
+        { "value": 500, "question": "This composer wrote the Peer Gynt suite.", "answer": "Edvard Grieg" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block body_class %}page-question{% endblock %}
+{% block content %}
+<header class="topbar">
+  <h1>{{ category }} · <span class="gold">{{ q.value }}</span></h1>
+  <nav><a class="tool" href="{{ url_for('board') }}">← Board</a></nav>
+</header>
+
+<main class="clue">
+  <p class="clue-text">{{ q.question }}</p>
+  {% if reveal %}
+  <p class="clue-answer">{{ q.answer }}</p>
+  {% else %}
+  <a class="reveal" href="{{ url_for('question', c=c, r=r, reveal=1) }}">Show answer</a>
+  {% endif %}
+</main>
+
+{% if game.is_used(c, r) %}
+<footer class="judge done">
+  {% set w = game.winner(c, r) %}
+  <p>{% if w is not none %}{{ quiz.players[w] }} got it.{% else %}Nobody got it.{% endif %}</p>
+</footer>
+{% else %}
+<footer class="judge">
+  {% set wrong = game.wrong_players(c, r) %}
+  {% for name in quiz.players %}
+  {% set p = loop.index0 %}
+  <form method="post" action="{{ url_for('judge', c=c, r=r) }}" class="player{% if p in wrong %} out{% endif %}">
+    <input type="hidden" name="player" value="{{ p }}">
+    <input type="hidden" name="reveal" value="{{ '1' if reveal else '0' }}">
+    <span class="player-name">{{ name }}</span>
+    <button name="result" value="correct" class="ok" {% if p in wrong %}disabled{% endif %} aria-label="{{ name }} correct">✓</button>
+    <button name="result" value="wrong" class="bad" {% if p in wrong %}disabled{% endif %} aria-label="{{ name }} wrong">✗</button>
+  </form>
+  {% endfor %}
+  <form method="post" action="{{ url_for('judge', c=c, r=r) }}">
+    <button name="result" value="nobody" class="nobody">Nobody</button>
+  </form>
+</footer>
+{% endif %}
+{% endblock %}

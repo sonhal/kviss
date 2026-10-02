@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Admin · {{ quiz.title }}{% endblock %}
+{% block body_class %}page-admin{% endblock %}
+{% block content %}
+<header class="topbar">
+  <h1>Admin</h1>
+  <nav><a class="tool" href="{{ url_for('board') }}">← Board</a></nav>
+</header>
+
+<main class="admin">
+  <section>
+    <h2>Adjust scores</h2>
+    {% for name in quiz.players %}
+    {% set p = loop.index0 %}
+    <form method="post" action="{{ url_for('adjust') }}" class="adjust">
+      <input type="hidden" name="player" value="{{ p }}">
+      <span class="player-name">{{ name }}</span>
+      <strong>{{ game.state.scores[p] }}</strong>
+      <button name="delta" value="-100">−100</button>
+      <button name="delta" value="100">+100</button>
+    </form>
+    {% endfor %}
+  </section>
+
+  <section>
+    <h2>Game</h2>
+    <p>{{ game.state.used|length }} of {{ game.total_questions() }} questions played.</p>
+    <form method="post" action="{{ url_for('undo') }}">
+      <input type="hidden" name="next" value="admin">
+      <button {% if not game.can_undo() %}disabled{% endif %}>↶ Undo last action</button>
+    </form>
+    <form method="post" action="{{ url_for('reset') }}" class="reset">
+      <label><input type="checkbox" name="confirm" value="yes" required> Yes, wipe all scores</label>
+      <button class="bad">Reset game</button>
+    </form>
+  </section>
+</main>
+{% endblock %}

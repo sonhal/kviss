@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block body_class %}page-board{% endblock %}
+{% block content %}
+<header class="topbar">
+  <h1>{{ quiz.title }}</h1>
+  <nav>
+    {% if game.can_undo() %}
+    <form method="post" action="{{ url_for('undo') }}"><button class="tool">↶ Undo</button></form>
+    {% endif %}
+    <a class="tool" href="{{ url_for('admin') }}">⚙</a>
+  </nav>
+</header>
+
+{% if game.is_over() %}
+<main class="final">
+  <h2>Final results</h2>
+  <ol class="podium">
+    {% for p in game.standings() %}
+    <li class="place-{{ loop.index }}"><span>{{ p.name }}</span><strong>{{ p.score }}</strong></li>
+    {% endfor %}
+  </ol>
+</main>
+{% else %}
+<main class="board" style="--cols: {{ quiz.categories|length }}; --rows: {{ rows }}">
+  {% for cat in quiz.categories %}
+  <div class="cat">{{ cat.name }}</div>
+  {% endfor %}
+  {% for r in range(rows) %}
+    {% for cat in quiz.categories %}
+      {% set c = loop.index0 %}
+      {% if r < cat.questions|length %}
+        {% if game.is_used(c, r) %}
+        <div class="cell used"></div>
+        {% else %}
+        <a class="cell" href="{{ url_for('question', c=c, r=r) }}">{{ cat.questions[r].value }}</a>
+        {% endif %}
+      {% else %}
+      <div class="cell empty"></div>
+      {% endif %}
+    {% endfor %}
+  {% endfor %}
+</main>
+{% endif %}
+
+{% include "_scores.html" %}
+{% endblock %}

@@ -1,0 +1,227 @@
+/* Sized for a landscape phone mirrored to a 16:9 TV: everything scales with the viewport. */
+:root {
+  --bg: #060c6e;
+  --tile: #0a1fc2;
+  --tile-hover: #1530e0;
+  --used: #040850;
+  --gold: #ffcc00;
+  --text: #ffffff;
+  --muted: #9aa4e8;
+  --ok: #1e9e4a;
+  --bad: #c62828;
+  --gap: clamp(3px, 0.6vmin, 8px);
+}
+
+* { box-sizing: border-box; }
+
+html, body { margin: 0; height: 100%; }
+
+body {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Helvetica Neue", Arial, system-ui, sans-serif;
+  touch-action: manipulation; /* no double-tap zoom on fast taps */
+  -webkit-tap-highlight-color: transparent;
+}
+
+a { color: inherit; text-decoration: none; }
+button { font: inherit; color: inherit; cursor: pointer; }
+.gold { color: var(--gold); }
+
+/* --- top bar ------------------------------------------------------------ */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.4vmin 2vmin;
+}
+.topbar h1 {
+  margin: 0;
+  font-size: clamp(14px, 3.5vmin, 36px);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.topbar nav { display: flex; gap: 0.5rem; }
+.topbar form { margin: 0; }
+.tool {
+  display: inline-block;
+  padding: 0.3em 0.7em;
+  border: 1px solid var(--muted);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: clamp(12px, 2.6vmin, 20px);
+}
+
+/* --- board -------------------------------------------------------------- */
+
+.board {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(var(--cols), 1fr);
+  grid-template-rows: auto repeat(var(--rows), 1fr);
+  gap: var(--gap);
+  padding: var(--gap);
+  min-height: 0;
+}
+.cat, .cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  background: var(--tile);
+  border-radius: 4px;
+}
+.cat {
+  padding: 1vmin;
+  min-height: 9vmin;
+  font-size: clamp(11px, 3vmin, 30px);
+  font-weight: 700;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+.cell {
+  color: var(--gold);
+  font-size: clamp(16px, 7vmin, 72px);
+  font-weight: 800;
+  text-shadow: 0.06em 0.06em 0 #000;
+}
+a.cell:active, a.cell:hover { background: var(--tile-hover); }
+.cell.used, .cell.empty { background: var(--used); }
+
+/* --- scores ------------------------------------------------------------- */
+
+.scores {
+  display: flex;
+  justify-content: space-around;
+  gap: var(--gap);
+  padding: var(--gap);
+}
+.score {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.6vmin;
+  background: var(--used);
+  border-radius: 4px;
+}
+.score-name { font-size: clamp(11px, 2.6vmin, 24px); text-transform: uppercase; }
+.score-value { font-size: clamp(14px, 4.5vmin, 44px); font-weight: 800; color: var(--gold); }
+.negative { color: #ff6b6b; }
+
+/* --- question ----------------------------------------------------------- */
+
+.clue {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4vmin;
+  padding: 2vmin 6vmin;
+  text-align: center;
+  min-height: 0;
+}
+.clue-text {
+  margin: 0;
+  font-size: clamp(20px, 7vmin, 80px);
+  font-weight: 700;
+  line-height: 1.2;
+  text-transform: uppercase;
+  text-shadow: 0.05em 0.05em 0 #000;
+}
+.clue-answer {
+  margin: 0;
+  color: var(--gold);
+  font-size: clamp(18px, 6vmin, 64px);
+  font-weight: 800;
+}
+.reveal {
+  padding: 0.5em 1.2em;
+  border: 2px solid var(--gold);
+  border-radius: 999px;
+  color: var(--gold);
+  font-size: clamp(14px, 3.5vmin, 30px);
+}
+
+.judge {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--gap);
+  padding: var(--gap);
+}
+.judge form { margin: 0; }
+.judge.done p { margin: 1vmin; font-size: clamp(14px, 4vmin, 36px); color: var(--muted); }
+.player {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  padding: 0.3em 0.5em;
+  background: var(--used);
+  border-radius: 6px;
+  font-size: clamp(13px, 3vmin, 26px);
+}
+.player.out { opacity: 0.35; }
+.player-name { text-transform: uppercase; font-weight: 700; padding-right: 0.2em; }
+.judge button, .admin button {
+  min-width: 2.4em;
+  min-height: 2.2em;
+  border: 0;
+  border-radius: 6px;
+  font-weight: 800;
+  background: var(--tile);
+}
+.judge .ok { background: var(--ok); }
+.judge .bad, .admin .bad { background: var(--bad); }
+.judge button:disabled, .admin button:disabled { opacity: 0.4; cursor: default; }
+.nobody { height: 100%; padding: 0 1em; font-size: clamp(13px, 3vmin, 26px); }
+
+/* --- final -------------------------------------------------------------- */
+
+.final {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+}
+.final h2 { margin: 0 0 3vmin; color: var(--gold); font-size: clamp(22px, 8vmin, 80px); text-transform: uppercase; }
+.podium { margin: 0; padding: 0; list-style: none; width: min(90vw, 700px); }
+.podium li {
+  display: flex;
+  justify-content: space-between;
+  padding: 1vmin 2vmin;
+  margin-bottom: var(--gap);
+  background: var(--tile);
+  border-radius: 6px;
+  font-size: clamp(16px, 5vmin, 44px);
+  text-transform: uppercase;
+}
+.podium .place-1 { background: var(--gold); color: #000; font-size: clamp(20px, 7vmin, 60px); }
+.podium strong { font-weight: 800; }
+
+/* --- admin -------------------------------------------------------------- */
+
+.admin {
+  flex: 1;
+  overflow-y: auto;
+  padding: 2vmin 4vmin;
+  font-size: 16px;
+}
+.admin section { max-width: 640px; margin-bottom: 2rem; }
+.admin h2 { color: var(--gold); }
+.admin form { margin: 0 0 0.6rem; }
+.adjust { display: flex; align-items: center; gap: 0.6rem; }
+.adjust .player-name { flex: 1; }
+.adjust strong { min-width: 4em; text-align: right; color: var(--gold); }
+.admin button { padding: 0 1em; }
+.reset { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin-top: 2rem !important; }

@@ -1,0 +1,24 @@
+# /etc/systemd/system/kviss.service
+[Unit]
+Description=Kviss quiz
+After=network.target
+
+[Service]
+User=kviss
+Group=kviss
+WorkingDirectory=/opt/kviss
+# Put KVISS_PASSWORD=... in this file (chmod 600). Leave it out to run without a password.
+EnvironmentFile=-/etc/kviss.env
+# One worker on purpose: game state lives in that process. Threads handle concurrency.
+ExecStart=/opt/kviss/.venv/bin/gunicorn --workers 1 --threads 4 --bind 127.0.0.1:8000 'app:create_app()'
+Restart=on-failure
+
+# Hardening: the service can only write inside its own directory.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/kviss
+
+[Install]
+WantedBy=multi-user.target
