@@ -54,6 +54,120 @@
     if (navigator.vibrate) navigator.vibrate(result === "wrong" ? [40, 60, 40] : 30);
   });
 
+  // --- Sound: drumroll + fanfare, synthesized with the Web Audio API ---------
+  // No audio files needed. Browsers only allow audio after a user gesture, so
+  // the context is created lazily inside the host's tap.
+  const Sound = (() => {
+    const KEY = "kviss-muted";
+    let muted = false;
+    try { muted = localStorage.getItem(KEY) === "1"; } catch (_) {}
+    let ctx = null, master = null, noise = null;
+
+    function audio() {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      if (!ctx) {
+        // iPhone: play even when the ring/silent switch is on silent (Safari 16.4+).
+        try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch (_) {}
+        ctx = new AC();
+        const comp = ctx.createDynamicsCompressor();
+        master = ctx.createGain();
+        master.gain.value = muted ? 0 : 0.7;
+        master.connect(comp).connect(ctx.destination);
+        noise = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+        const d = noise.getChannelData(0);
+        for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      }
+      if (ctx.state === "suspended") ctx.resume();
+      return ctx;
+    }
+
+    function burst(t, { gain, decay, type, freq, q = 1 }) {
+      const src = ctx.createBufferSource();
+      src.buffer = noise;
+      const f = ctx.createBiquadFilter();
+      f.type = type; f.frequency.value = freq; f.Q.value = q;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(gain, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + decay);
+      src.connect(f).connect(g).connect(master);
+      src.start(t, Math.random() * 0.5);
+      src.stop(t + decay + 0.05);
+    }
+
+    // One brassy note: two detuned sawtooths through a lowpass filter that "opens" on attack.
+    function brass(freq, t, dur, vol) {
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol, t + 0.03);
+      g.gain.setValueAtTime(vol, t + dur - 0.08);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.25);
+      const f = ctx.createBiquadFilter();
+      f.type = "lowpass";
+      f.frequency.setValueAtTime(700, t);
+      f.frequency.exponentialRampToValueAtTime(3200, t + 0.06);
+      f.frequency.exponentialRampToValueAtTime(1600, t + dur);
+      f.connect(g).connect(master);
+      for (const detune of [-7, 7]) {
+        const o = ctx.createOscillator();
+        o.type = "sawtooth";
+        o.frequency.value = freq;
+        o.detune.value = detune;
+        o.connect(f);
+        o.start(t);
+        o.stop(t + dur + 0.3);
+      }
+    }
+
+    return {
+      get muted() { return muted; },
+      setMuted(value) {
+        muted = value;
+        try { localStorage.setItem(KEY, value ? "1" : "0"); } catch (_) {}
+        if (master) master.gain.setTargetAtTime(value ? 0 : 0.7, ctx.currentTime, 0.02);
+      },
+      // Snare roll that swells in volume and speed; returns false if it could not play.
+      drumroll(seconds) {
+        if (muted || !audio()) return false;
+        const t0 = ctx.currentTime + 0.05;
+        for (let t = 0; t < seconds; ) {
+          const p = t / seconds;
+          burst(t0 + t, { gain: 0.45 + 1.1 * p * p, decay: 0.08, type: "bandpass", freq: 1800, q: 0.9 });
+          if (Math.round(t / 0.05) % 4 === 0) {
+            burst(t0 + t, { gain: 0.5 + 0.8 * p, decay: 0.12, type: "lowpass", freq: 180 }); // tom rumble
+          }
+          t += 0.055 - 0.015 * p; // speeds up towards the end
+        }
+        return true;
+      },
+      // Cymbal crash + "ta-ta-ta-taaa" fanfare ending on a C major chord.
+      fanfare() {
+        if (muted || !audio()) return;
+        const t = ctx.currentTime + 0.02;
+        burst(t, { gain: 0.9, decay: 1.8, type: "highpass", freq: 5000 });
+        burst(t, { gain: 0.9, decay: 0.35, type: "lowpass", freq: 120 }); // bass drum
+        const G4 = 392, C5 = 523.25, E5 = 659.25, G5 = 783.99, C4 = 261.63;
+        brass(G4, t, 0.13, 0.22);
+        brass(G4, t + 0.16, 0.13, 0.22);
+        brass(G4, t + 0.32, 0.13, 0.22);
+        for (const f of [C4, C5, E5, G5]) brass(f, t + 0.48, 1.4, 0.16);
+      },
+    };
+  })();
+
+  // Mute toggle (only shown where there is sound to mute).
+  const soundBtn = document.querySelector(".sound-toggle");
+  if (soundBtn && document.querySelector(".final")) {
+    const paint = () => {
+      soundBtn.textContent = Sound.muted ? "🔇" : "🔊";
+      soundBtn.setAttribute("aria-pressed", String(Sound.muted));
+      soundBtn.setAttribute("aria-label", Sound.muted ? "Slå på lyd" : "Slå av lyd");
+    };
+    soundBtn.hidden = false;
+    paint();
+    soundBtn.addEventListener("click", () => { Sound.setMuted(!Sound.muted); paint(); });
+  }
+
   // --- Animated numbers -----------------------------------------------------
   function countTo(el, from, to, delayMs = 0) {
     if (reduceMotion || from === to) { el.textContent = to; return; }
@@ -105,9 +219,10 @@
         : `Avslør ${step.dataset.place}. plass`;
     };
 
-    const advance = () => {
-      if (shown >= order.length) return;
-      const step = order[shown++];
+    const DRUMROLL_SECONDS = 2.6;
+    let busy = false; // ignore taps while the drumroll plays
+
+    const reveal = (step) => {
       step.classList.add("go");
       const score = step.querySelector(".step-score");
       countTo(score, 0, Number(score.dataset.score), 700);
@@ -117,6 +232,26 @@
         next.hidden = true;
       } else {
         label();
+      }
+    };
+
+    const advance = () => {
+      if (busy || shown >= order.length) return;
+      const step = order[shown++];
+      const isWinner = shown === order.length;
+      if (isWinner && Sound.drumroll(DRUMROLL_SECONDS)) {
+        busy = true;
+        next.textContent = "🥁 …";
+        page.classList.add("drumroll");
+        setTimeout(() => {
+          busy = false;
+          page.classList.remove("drumroll");
+          Sound.fanfare();
+          reveal(step);
+        }, DRUMROLL_SECONDS * 1000);
+      } else {
+        if (isWinner) Sound.fanfare();
+        reveal(step);
       }
     };
 

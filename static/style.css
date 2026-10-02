@@ -13,6 +13,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 
 html, body { margin: 0; height: 100%; }
 
@@ -336,6 +337,12 @@ a.cell:active { transform: scale(0.96); }
   font-size: clamp(13px, 3.2vmin, 28px);
   animation: pulse-btn 1.6s ease-in-out infinite;
 }
+/* During the drumroll the stage shakes ever so slightly. */
+.drumroll .podium { animation: rumble 0.12s linear infinite; }
+.drumroll .next-btn { animation: none; opacity: 0.8; }
+@keyframes rumble { 25% { transform: translate(0.15vmin, -0.1vmin); } 75% { transform: translate(-0.15vmin, 0.1vmin); } }
+@media (prefers-reduced-motion: reduce) { .drumroll .podium { animation: none; } }
+
 @keyframes pulse-btn { 50% { box-shadow: 0 0 0 1vmin rgba(255, 204, 0, 0.25); } }
 
 /* Respect "reduce motion": show the finished podium straight away, no confetti. */
