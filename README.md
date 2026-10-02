@@ -13,9 +13,11 @@ The screens are in Norwegian (bokmål); code, config keys and docs are in Englis
   - **Nobody** closes the question with no change to any score.
 - **Admin** (`⚙`, `/admin`): adjust scores by hand, undo, and reset the game.
 - **Undo** reverts the last scoring action (up to 50 steps), for when you mis-tap.
-- When every question has been played, the board switches to a **Kahoot-style podium**: 3rd place rises first,
-  then 2nd, then a pause before 1st, followed by confetti. Places 4+ are listed underneath. Tied teams share a
-  place. Reload the page to replay the reveal, and use **Angre** if the last question was judged wrong.
+- When every question has been played, the board switches to a **Kahoot-style podium**. **You control the
+  reveal:** tap the screen (or the pulsing **Avslør …** button) to raise 3rd place, tap again for 2nd, and once
+  more for the winner and confetti. Places 4+ appear under the podium at the end. Tied teams share a place.
+  Reload the page to replay the reveal, and use **Angre** if the last question was judged wrong.
+  (Without JavaScript, the podium plays the same reveal automatically.)
 
 ### Polish (JavaScript and modern CSS, all optional)
 
@@ -32,7 +34,12 @@ restarted server continues the same game. If you edit `quiz.json`, the next star
 
 ## The quiz file
 
-Edit `quiz.json`, or point `KVISS_CONFIG` at another file:
+Edit `quiz.json`, or point `KVISS_CONFIG` at another file. `quiz-example.json` is a full 5-player quiz
+(Politikk, Sport, Musikk, Underholdning, Godt og Blandet). Try it with
+`KVISS_CONFIG=quiz-example.json .venv/bin/python app.py`, or on the VPS add `KVISS_CONFIG=/opt/kviss/quiz-example.json`
+to `/etc/kviss.env` and restart the service.
+
+The format:
 
 ```json
 {

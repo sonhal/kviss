@@ -1,0 +1,56 @@
+{
+  "title": "Kviss 2026",
+  "players": ["Spiller 1", "Spiller 2", "Spiller 3", "Spiller 4", "Spiller 5"],
+  "categories": [
+    {
+      "name": "Politikk",
+      "questions": [
+        { "value": 100, "question": "Norges grunnlov ble vedtatt på Eidsvoll i dette året.", "answer": "1814" },
+        { "value": 200, "question": "I 1972 og 1994 sa et flertall av nordmenn nei til medlemskap i denne organisasjonen.", "answer": "EU (EF i 1972)" },
+        { "value": 300, "question": "Hun ble i 1981 Norges første kvinnelige statsminister.", "answer": "Gro Harlem Brundtland" },
+        { "value": 400, "question": "Dette er antallet representanter på Stortinget siden 2005.", "answer": "169" },
+        { "value": 500, "question": "Dette året ble parlamentarismen innført i Norge, etter riksrettssaken mot Selmer-regjeringen.", "answer": "1884" }
+      ]
+    },
+    {
+      "name": "Sport",
+      "questions": [
+        { "value": 100, "question": "Ole Einar Bjørndalen er en legende i denne vintersporten.", "answer": "Skiskyting" },
+        { "value": 200, "question": "Denne byen var vertskap for vinter-OL i 1994.", "answer": "Lillehammer" },
+        { "value": 300, "question": "Denne nordmannen scoret seiersmålet for Manchester United i Champions League-finalen i 1999.", "answer": "Ole Gunnar Solskjær" },
+        { "value": 400, "question": "Under fotball-VM i 1998 slo Norge dette storlaget 2–1 i Marseille.", "answer": "Brasil" },
+        { "value": 500, "question": "Så mange ganger vant Grete Waitz New York Marathon.", "answer": "9 ganger" }
+      ]
+    },
+    {
+      "name": "Musikk",
+      "questions": [
+        { "value": 100, "question": "Denne norske DJ-en og produsenten fra Bergen slo gjennom internasjonalt med «Firestone» i 2014.", "answer": "Kygo" },
+        { "value": 200, "question": "Han er vokalisten i det norske bandet a-ha, kjent for «Take On Me».", "answer": "Morten Harket" },
+        { "value": 300, "question": "Dette albumet fra 1982 av Michael Jackson er blant historiens bestselgende.", "answer": "Thriller" },
+        { "value": 400, "question": "Denne norske jazzsaksofonisten er kjent for albumet «Officium» sammen med Hilliard Ensemble.", "answer": "Jan Garbarek" },
+        { "value": 500, "question": "Dette året vant Bobbysocks Eurovision for Norge med «La det swinge».", "answer": "1985" }
+      ]
+    },
+    {
+      "name": "Underholdning",
+      "questions": [
+        { "value": 100, "question": "Denne NRK-serien om ungdom på Hartvig Nissens skole ble en internasjonal suksess fra 2015.", "answer": "Skam" },
+        { "value": 200, "question": "Denne Disney-filmen fra 2013 har sangen «Let It Go».", "answer": "Frost (Frozen)" },
+        { "value": 300, "question": "I «Flåklypa Grand Prix» er Reodor Felgen oppfinneren av denne racerbilen.", "answer": "Il Tempo Gigante" },
+        { "value": 400, "question": "I 2020 ble denne sørkoreanske filmen den første ikke-engelskspråklige som vant Oscar for beste film.", "answer": "Parasitt (Parasite)" },
+        { "value": 500, "question": "I den britiske komiserien «Fawlty Towers» heter hotelleieren, spilt av John Cleese, dette.", "answer": "Basil Fawlty" }
+      ]
+    },
+    {
+      "name": "Godt og Blandet",
+      "questions": [
+        { "value": 100, "question": "Denne sjokoladen kalles ofte «tursjokoladen» og er fast følge i påskefjellet.", "answer": "Kvikk Lunsj" },
+        { "value": 200, "question": "Denne norske oppfinnelsen, patentert av Thor Bjørklund i 1925, brukes til å skjære ost.", "answer": "Ostehøvelen" },
+        { "value": 300, "question": "Dette er Norges største innsjø.", "answer": "Mjøsa" },
+        { "value": 400, "question": "Dette er hovedstaden i Australia, og det er ikke Sydney.", "answer": "Canberra" },
+        { "value": 500, "question": "Den legendariske byen Timbuktu ligger i dette vestafrikanske landet.", "answer": "Mali" }
+      ]
+    }
+  ]
+}

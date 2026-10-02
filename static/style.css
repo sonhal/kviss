@@ -307,6 +307,37 @@ a.cell:active { transform: scale(0.96); }
   100% { opacity: 1; transform: translate(6vw, 110vh) rotate(calc(var(--r) + 720deg)); }
 }
 
+/* Host-paced reveal (app.js adds .manual to <body>): nothing on the podium plays until
+   the host taps. Each revealed step gets .go; after 1st place the body gets .done. */
+.page-final.manual { --t3: 0s; --t2: 0s; --t1: 0s; }
+.manual .final { cursor: pointer; -webkit-user-select: none; user-select: none; }
+.manual .step:not(.go) { visibility: hidden; }
+.manual .step:not(.go) *,
+.manual:not(.done) .rest,
+.manual:not(.done) .confetti i { animation-play-state: paused; }
+.manual:not(.done) .rest,
+.manual:not(.done) .confetti { visibility: hidden; }
+/* The winner's step rises a little slower, for drama. */
+.manual .step.slot-1 .step-block { animation-duration: 1.4s; }
+.manual .step.slot-1 .step-who { animation-delay: 1.2s; }
+.manual .slot-1 .step-name { animation-delay: 2.4s; }
+.manual .confetti i { animation-delay: calc(1.4s + var(--d)); }
+
+.next-btn {
+  position: fixed;
+  right: max(2vmin, env(safe-area-inset-right));
+  bottom: max(2vmin, env(safe-area-inset-bottom));
+  padding: 0.5em 1.2em;
+  border: 2px solid var(--gold);
+  border-radius: 999px;
+  background: rgba(6, 12, 110, 0.85);
+  color: var(--gold);
+  font-weight: 800;
+  font-size: clamp(13px, 3.2vmin, 28px);
+  animation: pulse-btn 1.6s ease-in-out infinite;
+}
+@keyframes pulse-btn { 50% { box-shadow: 0 0 0 1vmin rgba(255, 204, 0, 0.25); } }
+
 /* Respect "reduce motion": show the finished podium straight away, no confetti. */
 @media (prefers-reduced-motion: reduce) {
   .page-final * { animation: none !important; }

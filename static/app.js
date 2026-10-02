@@ -86,10 +86,53 @@
     try { sessionStorage.setItem("kviss-scores", JSON.stringify(current)); } catch (_) {}
   }
 
-  // Podium: each score counts up as its team rises (timing comes from CSS).
-  document.querySelectorAll(".step").forEach((step) => {
-    const el = step.querySelector(".step-score");
-    const delay = parseFloat(getComputedStyle(step).getPropertyValue("--delay")) || 0;
-    countTo(el, 0, Number(el.textContent), (delay + 0.7) * 1000);
-  });
+  // Podium: the host reveals one place per tap (3rd, 2nd, then the winner).
+  // Without this script the CSS plays the same reveal automatically instead.
+  const final = document.querySelector(".final");
+  if (final) {
+    const page = document.body;
+    const next = final.querySelector(".next-btn");
+    const order = [3, 2, 1]
+      .map((slot) => final.querySelector(`.step.slot-${slot}`))
+      .filter(Boolean);
+    let shown = 0;
+
+    const label = () => {
+      if (shown >= order.length) return;
+      const step = order[shown];
+      next.textContent = step.classList.contains("slot-1")
+        ? "Avslør vinneren!"
+        : `Avslør ${step.dataset.place}. plass`;
+    };
+
+    const advance = () => {
+      if (shown >= order.length) return;
+      const step = order[shown++];
+      step.classList.add("go");
+      const score = step.querySelector(".step-score");
+      countTo(score, 0, Number(score.dataset.score), 700);
+      if (navigator.vibrate) navigator.vibrate(30);
+      if (shown === order.length) {
+        page.classList.add("done");
+        next.hidden = true;
+      } else {
+        label();
+      }
+    };
+
+    page.classList.add("manual");
+    order.forEach((step) => { step.querySelector(".step-score").textContent = "0"; });
+    next.hidden = false;
+    label();
+
+    // Tap anywhere on the stage (or press Space / Enter / →) to reveal the next place.
+    final.addEventListener("click", (e) => {
+      if (!e.target.closest("a, form")) advance();
+    });
+    document.addEventListener("keydown", (e) => {
+      // A focused button already turns Space/Enter into a click; don't count it twice.
+      if (e.target.closest("button, a")) return;
+      if ([" ", "Enter", "ArrowRight"].includes(e.key)) { e.preventDefault(); advance(); }
+    });
+  }
 })();

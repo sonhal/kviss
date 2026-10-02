@@ -5,9 +5,9 @@
 {% include "_topbar.html" %}
 
 {#
-  Kahoot-style podium. Revealed bottom-up with CSS animations only:
-  3rd place rises first, then 2nd, then a pause and 1st, then confetti.
-  Reload the page to replay the reveal.
+  Kahoot-style podium. With app.js the host taps to reveal 3rd, 2nd and then
+  1st place (followed by confetti). Without it, CSS plays the same reveal
+  automatically. Reload the page to replay the reveal.
 #}
 {% set podium = ranking[:3] %}
 {% set rest = ranking[3:] %}
@@ -18,10 +18,10 @@
     {# Visual order on stage: 2nd, 1st, 3rd #}
     {% for slot in [2, 1, 3] if slot <= podium|length %}
     {% set p = podium[slot - 1] %}
-    <div class="step slot-{{ slot }} rank-{{ p.place }}">
+    <div class="step slot-{{ slot }} rank-{{ p.place }}" data-place="{{ p.place }}">
       <div class="step-who">
         <span class="step-name">{{ p.name }}</span>
-        <span class="step-score">{{ p.score }}</span>
+        <span class="step-score" data-score="{{ p.score }}">{{ p.score }}</span>
       </div>
       <div class="step-block">{{ p.place }}</div>
     </div>
@@ -35,6 +35,8 @@
     {% endfor %}
   </ol>
   {% endif %}
+
+  <button class="next-btn" type="button" hidden>Avslør</button>
 </main>
 
 <div class="confetti" aria-hidden="true">
