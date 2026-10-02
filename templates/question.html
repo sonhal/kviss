@@ -8,9 +8,9 @@
 
 <main class="clue">
   <p class="clue-text">{{ q.question }}</p>
-  {% if reveal %}
-  <p class="clue-answer">{{ q.answer }}</p>
-  {% else %}
+  {# The answer is always in the page; app.js reveals it in place. The link is the no-JS fallback. #}
+  <p class="clue-answer"{% if not reveal %} hidden{% endif %}>{{ q.answer }}</p>
+  {% if not reveal %}
   <a class="reveal" href="{{ url_for('question', c=c, r=r, reveal=1) }}">Vis svar</a>
   {% endif %}
 </main>

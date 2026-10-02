@@ -1,7 +1,8 @@
 # Kviss
 
 A Jeopardy-style quiz built to be run from a phone that is screen-shared to a TV.
-It uses Python (Flask), plain HTML and CSS, and needs no JavaScript.
+It uses Python (Flask), HTML and CSS, with a small JavaScript layer (`static/app.js`) for polish.
+Everything still works if that script fails to load.
 The screens are in Norwegian (bokmål); code, config keys and docs are in English.
 
 - **Board** (`/`): categories, point values, and live scores. Questions that have been played go dark.
@@ -12,7 +13,19 @@ The screens are in Norwegian (bokmål); code, config keys and docs are in Englis
   - **Nobody** closes the question with no change to any score.
 - **Admin** (`⚙`, `/admin`): adjust scores by hand, undo, and reset the game.
 - **Undo** reverts the last scoring action (up to 50 steps), for when you mis-tap.
-- When every question has been played, the board switches to **Final results**.
+- When every question has been played, the board switches to a **Kahoot-style podium**: 3rd place rises first,
+  then 2nd, then a pause before 1st, followed by confetti. Places 4+ are listed underneath. Tied teams share a
+  place. Reload the page to replay the reveal, and use **Angre** if the last question was judged wrong.
+
+### Polish (JavaScript and modern CSS, all optional)
+
+- The tapped tile zooms into the question screen. This uses cross-document View Transitions, available in
+  Chrome 126+ and Safari 18.2+; other browsers just navigate normally.
+- **Vis svar** reveals the answer in place, without a page reload.
+- Scores count up or down to their new value and flash green or red on the board.
+- The phone screen is kept awake while the page is open (Wake Lock API, which needs HTTPS).
+- Judge buttons ignore double taps and vibrate briefly on Android.
+- *Reduce motion* in the phone's accessibility settings turns the animations off.
 
 Game progress is saved in `state.json` after every action. That means a reloaded phone browser or a
 restarted server continues the same game. If you edit `quiz.json`, the next start begins a fresh game.
@@ -130,7 +143,7 @@ password is the one in `/etc/kviss.env`.
 - Hold the phone in **landscape**. The layout is sized for a 16:9 TV.
 - Turn off auto-lock and auto-rotate. Screen-mirroring (AirPlay/Chromecast) mirrors your whole phone,
   so silence notifications (Do Not Disturb).
-- Add the page to your home screen to get a fuller screen with no address bar.
+- **Add to Home Screen** and open Kviss from that icon. It then runs full screen in landscape, with no address bar on the TV.
 
 ## Ideas for after the MVP
 

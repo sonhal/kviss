@@ -8,6 +8,7 @@ reloaded phone browser or a restarted server picks up where the game left off.
 import copy
 import hashlib
 import json
+import mimetypes
 import os
 import secrets
 import threading
@@ -17,6 +18,7 @@ from urllib.parse import urlparse
 from flask import Flask, Response, abort, redirect, render_template, request, url_for
 
 BASE_DIR = Path(__file__).resolve().parent
+mimetypes.add_type("application/manifest+json", ".webmanifest")
 UNDO_LIMIT = 50
 
 
@@ -141,7 +143,12 @@ class Game:
 
     def standings(self):
         players = [{"name": n, "score": s} for n, s in zip(self.quiz["players"], self.state["scores"])]
-        return sorted(players, key=lambda p: p["score"], reverse=True)
+        players.sort(key=lambda p: p["score"], reverse=True)
+        # Tied scores share a place, and the next place is skipped (1, 1, 3).
+        for i, p in enumerate(players):
+            tied = i > 0 and p["score"] == players[i - 1]["score"]
+            p["place"] = players[i - 1]["place"] if tied else i + 1
+        return players
 
     # --- actions -----------------------------------------------------------
 
@@ -219,6 +226,8 @@ def create_app(config_path=None, state_path=None, password=None):
 
     @app.get("/")
     def board():
+        if game.is_over():
+            return render_template("final.html", ranking=game.standings())
         cats = game.quiz["categories"]
         rows = max(len(cat["questions"]) for cat in cats)
         return render_template("board.html", rows=rows)

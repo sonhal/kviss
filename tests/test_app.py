@@ -50,8 +50,21 @@ class KvissTest(unittest.TestCase):
         self.assertIn("&lt;script&gt;", page)
 
     def test_answer_hidden_until_revealed(self):
-        self.assertNotIn("A1", self.client.get("/q/0/0").get_data(as_text=True))
-        self.assertIn("A1", self.client.get("/q/0/0?reveal=1").get_data(as_text=True))
+        self.assertIn('class="clue-answer" hidden>A1', self.client.get("/q/0/0").get_data(as_text=True))
+        self.assertIn('class="clue-answer">A1', self.client.get("/q/0/0?reveal=1").get_data(as_text=True))
+
+    def test_standings_share_place_on_tie(self):
+        self.judge(0, 0, "correct", 0)
+        self.judge(1, 0, "correct", 1)
+        self.assertEqual([p["place"] for p in self.game.standings()], [1, 1])
+
+    def test_final_screen_podium(self):
+        self.judge(0, 1, "correct", 1)
+        for c, r in [(0, 0), (1, 0)]:
+            self.judge(c, r, "nobody")
+        page = self.client.get("/").get_data(as_text=True)
+        self.assertIn("step slot-1 rank-1", page)
+        self.assertNotIn('class="scores"', page)
 
     def test_classic_scoring(self):
         self.judge(0, 1, "wrong", 0)

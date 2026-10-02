@@ -3,7 +3,7 @@
   {% set score = game.state.scores[loop.index0] %}
   <div class="score">
     <span class="score-name">{{ name }}</span>
-    <span class="score-value{% if score < 0 %} negative{% endif %}">{{ score }}</span>
+    <span class="score-value{% if score < 0 %} negative{% endif %}" data-score="{{ score }}">{{ score }}</span>
   </div>
   {% endfor %}
 </footer>
