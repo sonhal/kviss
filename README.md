@@ -12,7 +12,9 @@ You add quizzes by uploading JSON to the API (see [Managing quizzes](#managing-q
 - **Landing page** (`/`, where the home-screen icon opens): the game on the TV right now, with its standings and a
   **Fortsett** button back to the board, a **Nytt spill** button, and **Tidligere spill**, the last 50 finished
   games with their date, winner and how far they got. Pages that need a game send you here when none is running.
-- **Nytt spill** (`/nytt`): pick a stored quiz, then type the teams or players, one per line. The list shows how
+- **Nytt spill** (`/nytt`): pick a stored quiz, then name the game and type the teams or players, one per line.
+  The name is pre-filled as "quiz title · date" and shows on the TV, the host view, the landing page and the
+  results. Leave it empty to name the game after the quiz. The list shows how
   many times each quiz has been played and when. Starting a game ends the one on the TV. If that game was
   half-way through you have to tick a box first. A game where nothing was scored is just dropped. The others are
   kept in the history. When the podium is showing, the top bar gets a **Nytt spill** button.

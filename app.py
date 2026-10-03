@@ -91,6 +91,7 @@ CREATE TABLE IF NOT EXISTS games (
     id         INTEGER PRIMARY KEY,
     quiz_id    INTEGER REFERENCES quizzes(id) ON DELETE SET NULL,
     quiz       TEXT NOT NULL,           -- frozen copy of the quiz as it was when the game started
+    name       TEXT,                    -- set by the host when starting; NULL = named after the quiz
     players    TEXT NOT NULL,           -- JSON list of names
     state      TEXT NOT NULL,           -- JSON: scores, used, wrong, undo history
     started_at TEXT NOT NULL,
@@ -99,7 +100,7 @@ CREATE TABLE IF NOT EXISTS games (
 -- At most one current game.
 CREATE UNIQUE INDEX IF NOT EXISTS one_current_game ON games ((ended_at IS NULL)) WHERE ended_at IS NULL;
 CREATE INDEX IF NOT EXISTS games_by_quiz ON games (quiz_id);
-PRAGMA user_version = 1;
+PRAGMA user_version = 2;
 """
 
 
@@ -121,6 +122,9 @@ class Store:
         with self._db() as db:
             db.execute("PRAGMA journal_mode = WAL")  # readers (e.g. the sqlite3 shell) never block a save
             db.executescript(SCHEMA)
+            # Version 1 databases have no games.name; CREATE TABLE IF NOT EXISTS doesn't add it.
+            if "name" not in {col["name"] for col in db.execute("PRAGMA table_info(games)")}:
+                db.execute("ALTER TABLE games ADD COLUMN name TEXT")
 
     @contextmanager
     def _db(self):
@@ -183,7 +187,7 @@ class Store:
 
     # --- games -------------------------------------------------------------
 
-    def start_game(self, slug, players):
+    def start_game(self, slug, players, name=None):
         """End the current game and start a new one. Returns the new game's row, or None
         if there is no such quiz. A current game where nothing was scored is dropped
         instead of being kept in the history."""
@@ -197,8 +201,8 @@ class Store:
             elif current:
                 db.execute("UPDATE games SET ended_at = ? WHERE id = ?", (now(), current["id"]))
             game_id = db.execute(
-                "INSERT INTO games (quiz_id, quiz, players, state, started_at) VALUES (?, ?, ?, ?, ?)",
-                (quiz["id"], quiz["data"], json.dumps(players, ensure_ascii=False),
+                "INSERT INTO games (quiz_id, quiz, name, players, state, started_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (quiz["id"], quiz["data"], name or None, json.dumps(players, ensure_ascii=False),
                  json.dumps(fresh_state(len(players))), now())).lastrowid
             return db.execute("SELECT * FROM games WHERE id = ?", (game_id,)).fetchone()
 
@@ -238,6 +242,7 @@ class Game:
         self.store = store
         # Templates read the players from quiz.players, as when they lived in the quiz file.
         self.quiz = {**json.loads(row["quiz"]), "players": json.loads(row["players"])}
+        self.name = row["name"] or self.quiz["title"]  # games from before names existed: the quiz title
         self.state = json.loads(row["state"])
         self.started_at, self.ended_at = row["started_at"], row["ended_at"]
         self.audio_files = {q["audio"] for cat in self.quiz["categories"]  # the only files /media/ serves
@@ -363,9 +368,9 @@ class Kviss:
         row = store.current_game()
         self.game = Game(row, store) if row else None
 
-    def start(self, slug, players):
+    def start(self, slug, players, name=None):
         with self.lock:
-            row = self.store.start_game(slug, players)
+            row = self.store.start_game(slug, players, name)
             if row is None:
                 return None
             # Continue the version count so the host view always notices the switch.
@@ -429,7 +434,8 @@ def create_app(db_path=None, password=None, media_dir=None, seed=None):
     @app.context_processor
     def inject():
         game = kviss.game
-        return {"game": game, "quiz": game.quiz if game else {"title": "Kviss"}}
+        return {"game": game, "quiz": game.quiz if game else {"title": "Kviss"},
+                "game_name": game.name if game else "Kviss"}
 
     def form(model):
         """The posted form, validated by a schemas.py model. Bad values (only possible with a
@@ -556,15 +562,16 @@ def create_app(db_path=None, password=None, media_dir=None, seed=None):
         game = kviss.game
         if request.method == "GET":
             players = chosen["players"] or store.last_players()
-            return render_template("new_game_players.html", chosen=chosen, players="\n".join(players))
+            name = f"{chosen['title']} · {datetime.now(tz):%d.%m.%Y}"  # a suggestion the host can change
+            return render_template("new_game_players.html", chosen=chosen, name=name, players="\n".join(players))
         try:
             entry = parse_form(NewGameForm, request.form.to_dict())
             if game and game.in_progress() and not entry.confirm:
                 raise FormError("Kryss av for å avslutte spillet som pågår.")
         except FormError as e:
-            return render_template("new_game_players.html", chosen=chosen,
+            return render_template("new_game_players.html", chosen=chosen, name=request.form.get("name", "").strip(),
                                    players=request.form.get("players", "").strip(), error=str(e)), 400
-        if kviss.start(slug, entry.players) is None:  # deleted in the meantime
+        if kviss.start(slug, entry.players, entry.name) is None:  # deleted in the meantime
             abort(404)
         return redirect(url_for("board"))
 
