@@ -11,40 +11,41 @@
 </header>
 
 <main class="admin">
-  {% if saved %}
+  {% if results %}
   <section aria-live="polite">
-    <ul class="quiz-list">
+    <h2>Resultat</h2>
+    <ul class="quiz-list upload-results">
+      {% for r in results %}
+      {% if r.problems %}
+      <li class="upload-failed">
+        <strong>✗ {{ r.file }}</strong> <span class="muted">ble ikke lagret:</span>
+        <ul>{% for p in r.problems %}<li>{{ p }}</li>{% endfor %}</ul>
+      </li>
+      {% else %}
       <li>
-        <a class="quiz-pick" href="{{ url_for('new_game_players', slug=saved.slug) }}">
-          <strong>✓ {{ saved.title }}</strong>
-          <span class="muted">{{ "Lagt til" if created else "Erstattet kvissen med samme navn" }} ·
-            {{ saved.categories|length }} {{ "kategori" if saved.categories|length == 1 else "kategorier" }} · {{ saved.questions }} spørsmål
-            · fra {{ file }}</span>
+        <a class="quiz-pick" href="{{ url_for('new_game_players', slug=r.quiz.slug) }}">
+          <strong>✓ {{ r.quiz.title }}</strong>
+          <span class="muted">{{ r.file }} · {{ "lagt til" if r.created else "erstattet kvissen med samme navn" }} ·
+            {{ r.quiz.categories|length }} {{ "kategori" if r.quiz.categories|length == 1 else "kategorier" }} · {{ r.quiz.questions }} spørsmål</span>
           <span>Start et spill med denne →</span>
         </a>
       </li>
+      {% endif %}
+      {% endfor %}
     </ul>
   </section>
   {% endif %}
 
   <section>
-    <h2>{% if saved %}Last opp en til{% else %}Last opp{% endif %}</h2>
+    <h2>Last opp</h2>
     <form method="post" enctype="multipart/form-data" class="players-form upload-form">
-      <label for="file">Kviss-fil (<code>.json</code>, maks 1 MB)</label>
-      <input id="file" name="file" type="file" accept=".json,application/json" required>
-      <label for="name">Navn på kvissen</label>
-      <p class="muted">Vises i lista på Nytt spill. Har filen en <code>title</code>, fylles den inn her når du velger filen.</p>
-      <input id="name" name="name" type="text" maxlength="100" value="{{ name }}" required autocomplete="off">
-      {% if problems %}
-      <div class="form-error upload-problems" role="alert">
-        <p>Kvissen ble ikke lagret:</p>
-        <ul>{% for p in problems %}<li>{{ p }}</li>{% endfor %}</ul>
-      </div>
-      {% endif %}
+      <label for="files">Velg én eller flere kviss-filer (<code>.json</code>, maks 1 MB til sammen).</label>
+      <input id="files" name="files" type="file" accept=".json,application/json" multiple required>
+      {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
       <button class="start">Last opp</button>
     </form>
-    <p class="muted">Har en kviss samme navn som en som finnes fra før, erstatter den gamle. Slik retter du en
-      skrivefeil. Spill som er startet, beholder sin egen kopi og endres ikke.</p>
+    <p class="muted">En kviss med samme tittel (eller <code>slug</code>) som en som finnes fra før, erstatter den.
+      Slik retter du en skrivefeil. Spill som er startet, beholder sin egen kopi og endres ikke.</p>
   </section>
 
   <section class="upload-guide">
@@ -53,8 +54,7 @@
       <li>Last ned <a class="gold" href="{{ url_for('static', filename='kviss-mal.json') }}" download="min-kviss.json">malen</a>,
         eller lag en ny tekstfil som slutter på <code>.json</code>.</li>
       <li>Åpne den i en teksteditor og bytt ut tittel, kategorier, spørsmål og svar med dine egne.</li>
-      <li>Last opp filen her og gi kvissen et navn. Er noe feil, får du en liste over hva som må rettes, og
-        ingenting blir lagret.</li>
+      <li>Last opp filen her. Er noe feil, får du en liste over hva som må rettes, og ingenting blir lagret.</li>
     </ol>
 <pre><code>{
   "title": "Fredagskviss",
@@ -70,7 +70,7 @@
   ]
 }</code></pre>
     <ul>
-      <li><code>title</code> (valgfritt): forslag til navn. Navnet du skriver i skjemaet, er det som gjelder.</li>
+      <li><code>title</code>: navnet på kvissen (påkrevd).</li>
       <li><code>categories</code>: 1–12 kategorier, hver med et <code>name</code> og 1–20 spørsmål.
         Rundt 6 kategorier × 5 spørsmål passer best på en TV.</li>
       <li>Hvert spørsmål trenger <code>value</code> (poeng, et helt tall uten anførselstegn: <code>100</code>, ikke

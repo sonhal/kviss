@@ -204,22 +204,6 @@
     if (navigator.vibrate) navigator.vibrate(result === "wrong" ? [40, 60, 40] : 30);
   });
 
-  // --- Upload page: suggest the quiz name from the file's own title ----------
-  // Only fills the name while the host hasn't typed one (or it is still our last suggestion).
-  const quizFile = document.querySelector(".upload-form input[type=file]");
-  const quizName = document.querySelector(".upload-form input[name=name]");
-  if (quizFile && quizName) {
-    let suggested = "";
-    quizFile.addEventListener("change", async () => {
-      const file = quizFile.files[0];
-      if (!file || (quizName.value.trim() && quizName.value !== suggested)) return;
-      try {
-        const title = JSON.parse(await file.text()).title;
-        if (typeof title === "string" && title.trim()) quizName.value = suggested = title.trim().slice(0, 100);
-      } catch (_) { /* not JSON: the server explains what is wrong on upload */ }
-    });
-  }
-
   // --- Sound: drumroll + fanfare, synthesized with the Web Audio API ---------
   // No audio files needed. Browsers only allow audio after a user gesture, so
   // the context is created lazily inside the host's tap.

@@ -497,82 +497,67 @@ class KvissTest(unittest.TestCase):
         self.assertEqual(self.game.state["scores"], [0, -100])
         self.assertEqual(self.client.post("/undo", data={"next": "admin"}).headers["Location"], "/admin")
 
-    def upload_file(self, body, name="Fredagskviss", filename="kviss.json", client=None, **kwargs):
-        data = {"name": name}
-        if body is not None:
-            data["file"] = (io.BytesIO(body), filename)
+    def upload_files(self, *files, client=None, **kwargs):
+        data = {"files": [(io.BytesIO(body), name) for name, body in files]}
         return (client or self.client).post("/last-opp", data=data, content_type="multipart/form-data", **kwargs)
 
     def test_upload_page(self):
         page = self.client.get("/last-opp").get_data(as_text=True)
         self.assertIn('type="file"', page)
-        self.assertIn('name="name"', page)
         self.assertIn("Slik lager du en kviss-fil", page)
         self.assertIn('href="/static/kviss-mal.json"', page)
         for path in ("/", "/nytt", "/admin"):
             self.assertIn('href="/last-opp"', self.client.get(path).get_data(as_text=True), path)
 
     def test_upload_template_is_valid(self):
-        template = BASE_DIR / "static" / "kviss-mal.json"
-        load_quiz(template)
-        self.assertEqual(self.upload_file(template.read_bytes(), name="Min kviss").status_code, 200)
-
-    def test_upload_uses_the_name_from_the_form(self):
-        body = json.dumps({**QUIZ, "title": "Tittel i fila", "slug": "fra-fila"}).encode()
-        resp = self.upload_file(body, name="  Fredagskviss   på Bærum ")
+        quiz = load_quiz(BASE_DIR / "static" / "kviss-mal.json")
+        self.assertEqual(quiz["slug"], "min-kviss")
+        resp = self.upload_files(("min-kviss.json", (BASE_DIR / "static" / "kviss-mal.json").read_bytes()))
         self.assertEqual(resp.status_code, 200)
-        page = resp.get_data(as_text=True)
-        self.assertIn("✓ Fredagskviss på Bærum", page)
-        self.assertIn("Lagt til", page)
-        self.assertIn('href="/nytt/fredagskviss-pa-baerum"', page)
-        quiz = self.client.get("/api/quizzes/fredagskviss-pa-baerum").get_json()
-        self.assertEqual(quiz["title"], "Fredagskviss på Bærum")
-        self.assertEqual(self.client.get("/api/quizzes/fra-fila").status_code, 404)
-        # The title in the file is optional; the same name replaces the quiz.
-        no_title = {k: v for k, v in QUIZ.items() if k != "title"}
-        no_title["categories"] = no_title["categories"][:1]
-        resp = self.upload_file(json.dumps(no_title).encode(), name="Fredagskviss på Bærum")
-        self.assertIn("Erstattet", resp.get_data(as_text=True))
-        quiz = self.client.get("/api/quizzes/fredagskviss-pa-baerum").get_json()
-        self.assertEqual(len(quiz["categories"]), 1)
 
-    def test_upload_shows_every_problem_and_saves_nothing(self):
-        bad = json.dumps({**QUIZ, "categories": [{"name": "Sport", "questions": [
+    def test_upload_quiz_files(self):
+        good = json.dumps({**QUIZ, "title": "Fredagskviss"}).encode()
+        bad = json.dumps({**QUIZ, "title": "Feil", "categories": [{"name": "Sport", "questions": [
             {"value": "100", "question": "Q", "anwser": "A"}]}]}).encode()
-        before = self.client.get("/api/quizzes").get_json()
-        for body, name, messages in [
-                (bad, "Feil", ["Kvissen ble ikke lagret",
-                               "category &#39;Sport&#39;, question #1, &#39;value&#39; must be a whole number",
-                               "&#39;anwser&#39; is not a known field"]),
-                (b"{nope", "Feil", ["Ikke gyldig JSON"]),
-                (b"[" * 100000, "Feil", ["Ikke gyldig JSON"]),
-                (b"[]", "Feil", ["object"]),
-                (json.dumps(QUIZ).encode(), "", ["Skriv et navn på kvissen"]),
-                (json.dumps(QUIZ).encode(), "!!", ["minst én bokstav"]),
-                (json.dumps(QUIZ).encode(), "x" * 101, ["maks 100 tegn"]),
-                (None, "Feil", ["Velg en JSON-fil"])]:
-            resp = self.upload_file(body, name=name)
-            self.assertEqual(resp.status_code, 400, messages)
-            page = resp.get_data(as_text=True)
-            for message in messages:
-                self.assertIn(message, page)
-            if name == "Feil":
-                self.assertIn('value="Feil"', page)  # the name is kept for the next try
-        self.assertEqual(self.client.get("/api/quizzes").get_json(), before)
+        resp = self.upload_files(("fredag.json", good), ("feil.json", bad), ("tull.json", b"{nope"))
+        self.assertEqual(resp.status_code, 200)  # one of them was saved
+        page = resp.get_data(as_text=True)
+        self.assertIn("✓ Fredagskviss", page)
+        self.assertIn("lagt til", page)
+        self.assertIn('href="/nytt/fredagskviss"', page)
+        self.assertIn("✗ feil.json", page)
+        self.assertIn("category &#39;Sport&#39;, question #1, &#39;value&#39; must be a whole number", page)
+        self.assertIn("&#39;anwser&#39; is not a known field", page)
+        self.assertIn("✗ tull.json", page)
+        self.assertIn("Ikke gyldig JSON", page)
+        slugs = [q["slug"] for q in self.client.get("/api/quizzes").get_json()]
+        self.assertEqual(slugs, ["fredagskviss", "test"])  # the broken files changed nothing
+        # The same title again replaces it, as with the API.
+        resp = self.upload_files(("fredag.json", good))
+        self.assertIn("erstattet", resp.get_data(as_text=True))
+        # Nothing saved at all is a 400.
+        self.assertEqual(self.upload_files(("tull.json", b"[")).status_code, 400)
+        self.assertEqual(self.upload_files(("tull.json", b"[" * 100000)).status_code, 400)
+
+    def test_upload_needs_a_file(self):
+        resp = self.client.post("/last-opp", data={}, content_type="multipart/form-data")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("Velg minst én JSON-fil", resp.get_data(as_text=True))
 
     def test_upload_too_large(self):
-        resp = self.upload_file(b" " * (2 * 1024 * 1024))
+        resp = self.upload_files(("stor.json", b" " * (2 * 1024 * 1024)))
         self.assertEqual(resp.status_code, 413)
-        self.assertIn("for stor", resp.get_data(as_text=True))
+        self.assertIn("for store", resp.get_data(as_text=True))
 
     def test_upload_needs_password_and_same_origin(self):
         client = self.make_client(password="s3cret")
-        body = json.dumps(QUIZ).encode()
-        self.assertEqual(self.upload_file(body, client=client).status_code, 401)
+        body = json.dumps({**QUIZ, "title": "Hemmelig"}).encode()
+        self.assertEqual(self.upload_files(("q.json", body), client=client).status_code, 401)
         auth = {"Authorization": "Basic " + base64.b64encode(b":s3cret").decode()}
-        resp = self.upload_file(body, client=client, headers={**auth, "Origin": "https://evil.example"})
+        resp = self.upload_files(("q.json", body), client=client,
+                                 headers={**auth, "Origin": "https://evil.example"})
         self.assertEqual(resp.status_code, 403)
-        self.assertEqual(self.upload_file(body, client=client, headers=auth).status_code, 200)
+        self.assertEqual(self.upload_files(("q.json", body), client=client, headers=auth).status_code, 200)
 
     def test_api_needs_password(self):
         client = self.make_client(password="s3cret")
