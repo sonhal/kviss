@@ -30,7 +30,7 @@ from flask import (Flask, Response, abort, jsonify, redirect, render_template, r
 from werkzeug.exceptions import RequestEntityTooLarge
 
 from schemas import (AdjustForm, ConfigError, ConfirmForm, FormError, JudgeForm, NewGameForm, UndoForm, parse_form,
-                     parse_quiz)
+                     parse_quiz, slugify)
 
 BASE_DIR = Path(__file__).resolve().parent
 mimetypes.add_type("application/manifest+json", ".webmanifest")
@@ -578,39 +578,47 @@ def create_app(db_path=None, password=None, media_dir=None, seed=None):
 
     # --- uploading quizzes from the browser ------------------------------------
 
-    def read_quiz_upload(upload):
-        """One uploaded file: the saved quiz, or an error the page shows next to the file name."""
-        result = {"file": upload.filename or "(uten navn)", "problems": []}
+    def read_quiz_upload(upload, name):
+        """The uploaded file as a quiz named by the form, or the problems to show on the page."""
         try:
             data = json.loads(upload.read())
         except (json.JSONDecodeError, UnicodeDecodeError) as e:
-            result["problems"] = [f"Ikke gyldig JSON: {e}"]
-            return result
+            raise ConfigError(f"Ikke gyldig JSON: {e}") from None
         except RecursionError:
-            result["problems"] = ["Ikke gyldig JSON: for dypt nøstet"]
-            return result
-        try:
-            quiz = validate_quiz(data, kviss.media_dir)
-        except ConfigError as e:
-            result["problems"] = e.problems
-            return result
-        result["created"] = store.save_quiz(quiz)
-        result["quiz"] = store.quiz(quiz["slug"])
-        return result
+            raise ConfigError("Ikke gyldig JSON: for dypt nøstet") from None
+        if isinstance(data, dict):
+            # The name from the form wins over the file's own title and slug, so it also decides
+            # which quiz an upload replaces.
+            data = {**{k: v for k, v in data.items() if k != "slug"}, "title": name}
+        return validate_quiz(data, kviss.media_dir)
 
     @app.route("/last-opp", methods=["GET", "POST"])
     def upload_quiz():
         if request.method == "GET":
             return render_template("upload.html")
-        try:
-            uploads = [f for f in request.files.getlist("files") if f.filename]
+        def failed(status, *problems, name=""):
+            return render_template("upload.html", name=name, problems=problems), status
+
+        try:  # reading either field reads the whole body, which is where a too large one is refused
+            name = " ".join(request.form.get("name", "").split())
+            upload = request.files.get("file")
         except RequestEntityTooLarge:
-            return render_template("upload.html", error="Filene er for store (maks 1 MB til sammen)."), 413
-        if not uploads:
-            return render_template("upload.html", error="Velg minst én JSON-fil."), 400
-        results = [read_quiz_upload(f) for f in uploads]
-        status = 400 if all(r["problems"] for r in results) else 200
-        return render_template("upload.html", results=results), status
+            return failed(413, "Filen er for stor (maks 1 MB).")
+        if not name:
+            return failed(400, "Skriv et navn på kvissen.")
+        if len(name) > 100:
+            return failed(400, "Navnet kan ha maks 100 tegn.", name=name)
+        if not slugify(name):
+            return failed(400, "Navnet må ha minst én bokstav eller ett tall.", name=name)
+        if upload is None or not upload.filename:
+            return failed(400, "Velg en JSON-fil.", name=name)
+        try:
+            quiz = read_quiz_upload(upload, name)
+        except ConfigError as e:
+            return failed(400, *e.problems, name=name)
+        created = store.save_quiz(quiz)
+        return render_template("upload.html", saved=store.quiz(quiz["slug"]), created=created,
+                               file=upload.filename)
 
     # --- admin -------------------------------------------------------------
 

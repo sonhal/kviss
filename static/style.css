@@ -597,10 +597,9 @@ a.cell:active { transform: scale(0.96); }
   color: var(--text);
   font: inherit;
 }
-.upload-results .upload-failed { padding: 0.8rem 1rem; border-radius: 6px; background: var(--used); }
-.upload-failed strong { color: #ff8a80; }
-.upload-failed ul { margin: 0.4rem 0 0; padding-left: 1.2em; line-height: 1.5; }
-.upload-failed ul li { margin-bottom: 0.2rem; }
+.upload-problems { padding: 0.6rem 1rem; border-radius: 6px; background: var(--used); font-weight: 400; }
+.upload-problems p { margin: 0; font-weight: 700; }
+.upload-problems ul { margin: 0.4rem 0 0; padding-left: 1.2em; line-height: 1.5; }
 .upload-guide { line-height: 1.5; }
 .upload-guide h3 { margin-bottom: 0.3rem; }
 .upload-guide pre {

@@ -18,11 +18,10 @@ You add quizzes by uploading JSON files on **Last opp kviss** (`/last-opp`) or t
   many times each quiz has been played and when. Starting a game ends the one on the TV. If that game was
   half-way through you have to tick a box first. A game where nothing was scored is just dropped. The others are
   kept in the history. When the podium is showing, the top bar gets a **Nytt spill** button.
-- **Last opp kviss** (`/last-opp`, linked from the landing page, **Nytt spill** and admin): upload one or more quiz
-  JSON files from the browser. The page explains the format in Norwegian, with a downloadable template
-  (`static/kviss-mal.json`) and a prompt for making questions with an AI. Each file is checked like an API upload:
-  a valid one is saved (or replaces the quiz with the same slug) and links straight to starting a game, a broken
-  one is listed with every problem and changes nothing.
+- **Last opp kviss** (`/last-opp`, linked from the landing page, **Nytt spill** and admin): upload a quiz JSON file
+  from the browser and give the quiz a name. The page explains the format in Norwegian, with a downloadable template
+  (`static/kviss-mal.json`) and a prompt for making questions with an AI. The file is checked like an API upload:
+  a valid one is saved and links straight to starting a game, a broken one lists every problem and changes nothing.
 - **Board** (`/brett`): categories, point values, and live scores. Questions that have been played go dark.
 - **Question** (`/q/<cat>/<row>`): the question in big text. Tap **Show answer** to reveal the answer to the room.
   Each player has ✓ / ✗ buttons:
@@ -79,9 +78,11 @@ already exists replaces it.** That is how you fix a typo. To keep both, give the
 
 ### Uploading from the browser
 
-Open **Last opp kviss** (`/last-opp`), pick one or more `.json` files and tap **Last opp**. The checks, the
-1 MB limit (for all the files together) and the replace-by-slug rule are the same as for the API below. Audio files
-for music questions still have to be copied to the server first.
+Open **Last opp kviss** (`/last-opp`), pick a `.json` file, type a name for the quiz and tap **Last opp**. The name
+from the form becomes the quiz's title and slug, so the file's own `title` and `slug` are ignored (`title` may be left
+out; with JavaScript, picking a file fills the name in from it). Uploading under a name that already exists replaces
+that quiz. The checks and the 1 MB limit are the same as for the API below. Audio files for music questions still
+have to be copied to the server first.
 
 ### The API
 
