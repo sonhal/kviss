@@ -286,13 +286,47 @@ or for a named volume use `docker cp song.mp3 kviss:/data/media/`.
 ### Shell commands in the container
 
 ```bash
-docker cp fredagskviss.json kviss:/tmp/
-docker exec kviss python app.py import /tmp/fredagskviss.json     # with compose: docker compose exec kviss ...
+# The file is piped in, because compose.yaml makes the container's filesystem read-only (docker cp to /tmp fails)
+docker compose exec -T kviss python app.py import /dev/stdin < fredagskviss.json   # plain docker: docker exec -i kviss ...
 
 # consistent backup while it runs, written into the volume
 docker exec kviss python -c "import sqlite3; sqlite3.connect('/data/kviss.db').backup(sqlite3.connect('/data/backup.db'))"
 docker cp kviss:/data/backup.db .
 ```
+
+### Differences from the systemd setup
+
+Mostly things that behave the same but are configured somewhere else:
+
+- **Time zones.** Dates in the app follow `KVISS_TZ` (default `Europe/Oslo`), not the server's or the container's
+  clock zone. The database stores UTC, so moving between systemd and Docker never shifts a date. A misspelled
+  zone (`Europe/Olso`) falls back to UTC with a warning in the log, so check the log if times are off by an hour or
+  two. The container's own clock is UTC unless `TZ` is set. `compose.yaml` sets `TZ` to the same zone, so the
+  timestamps in `docker compose logs` match (with plain `docker run`, add `-e TZ=Europe/Oslo`). The image has its own
+  copy of the time zone rules, which is updated when you rebuild it (`docker compose build --pull`), not by
+  `apt upgrade` on the host.
+- **Firewall.** A port published by Docker skips ufw/firewalld. Keep the `127.0.0.1:` in front of the port, or the
+  app is reachable over plain HTTP from the internet, whatever ufw says.
+- **Logs** are in `docker compose logs` instead of `journalctl -u kviss`. Docker never deletes old logs unless told
+  to, so `compose.yaml` keeps 3 × 10 MB. Add the same `--log-opt max-size=10m --log-opt max-file=3` to a plain
+  `docker run`. As with systemd, requests are not logged: the host view polls every 1.5 s.
+- **Hardening.** The systemd unit makes everything but `/opt/kviss` read-only. `compose.yaml` does the same with a
+  read-only root filesystem (only `/data` and an in-memory `/tmp` can be written), no Linux capabilities, and
+  `no-new-privileges`.
+- **Restarts.** `restart: unless-stopped` restarts the app if it crashes and after a reboot (if Docker starts at
+  boot: `systemctl is-enabled docker`). An `unhealthy` health check does **not** restart it, it only shows in
+  `docker ps`.
+- **Stopping.** `docker stop` waits 10 seconds, then kills the app. Every save is a single SQLite transaction, so
+  this can't corrupt the database. At worst the tap made during the stop is lost.
+- **Updates** come from rebuilding the image, not from `pip install` in a venv. `docker compose build --pull`
+  also picks up Python and Debian security fixes. The image runs Python 3.12 on Debian 13, where a Debian 12 VPS
+  runs 3.11. The tests pass on both.
+- **Files the app reads** must be inside the container. `KVISS_CONFIG` and audio files must be under `/data`;
+  host paths like `/opt/kviss/media` mean nothing in the container. `quiz.json` and `quiz-example.json` come from
+  the image, and are only read when the database is empty.
+- **Docker Desktop (Mac/Windows).** On a laptop, keep `/data` in a named volume. SQLite's locking and WAL files
+  can misbehave on folders shared from the host OS (especially `C:\` under Windows). On a Linux VPS, both kinds of
+  mount are fine.
 
 The container's health check counts any HTTP answer, including `401` from the password prompt, as healthy
 (`docker ps` shows `healthy`). The same single-gunicorn-worker rule from the security notes applies: run **one**

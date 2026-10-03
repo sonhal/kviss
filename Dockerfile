@@ -7,7 +7,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     KVISS_DB=/data/kviss.db \
     KVISS_MEDIA=/data/media
 
-# tzdata: the slim image has no zoneinfo files, and KVISS_TZ would silently fall back to UTC.
+# tzdata (pip): a fallback time zone database, so KVISS_TZ keeps working even if the base image
+# drops Debian's /usr/share/zoneinfo. Python checks the system files first.
 COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r /app/requirements.txt tzdata
 
@@ -32,4 +33,6 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD ["python", "-c", "import urllib.request as u, urllib.error as e, sys\ntry: u.urlopen('http://127.0.0.1:8000/', timeout=4)\nexcept e.HTTPError: pass\nexcept Exception: sys.exit(1)"]
 
 # One worker on purpose: game state lives in that process. Threads handle concurrency.
-CMD ["gunicorn", "--workers", "1", "--threads", "4", "--bind", "0.0.0.0:8000", "--access-logfile", "-", "app:create_app()"]
+# No access log, as with systemd: the host view polls every 1.5 s and would fill the container log.
+# --worker-tmp-dir: gunicorn's heartbeat file goes to memory, so a read-only root filesystem works.
+CMD ["gunicorn", "--workers", "1", "--threads", "4", "--bind", "0.0.0.0:8000", "--worker-tmp-dir", "/dev/shm", "app:create_app()"]
