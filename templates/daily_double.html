@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block body_class %}page-question page-daily-double{% endblock %}
+{% block content %}
+{# Shown instead of the question when a Daily Double tile is opened, until someone has bet. #}
+<header class="topbar">
+  <h1>{{ category }} · <span class="gold">{{ q.value }}</span></h1>
+  <nav><a class="tool" href="{{ url_for('board') }}">← Brett</a></nav>
+</header>
+
+<main class="clue">
+  <p class="dd-title">Dagens dobbel!</p>
+  <form method="post" action="{{ url_for('wager', c=c, r=r) }}" class="dd-form">
+    <p class="dd-help">Hvem fant den? Sats fra {{ min_wager }} poeng opp til hele poengsummen din,
+      eller opp til {{ game.top_value() }} hvis du har mindre enn det.</p>
+    <div class="dd-players">
+      {% for name in quiz.players %}
+      {% set p = loop.index0 %}
+      <label class="dd-player">
+        <input type="radio" name="player" value="{{ p }}" data-max="{{ game.max_wager(p) }}" required
+               {% if form and form.get('player') == p|string %}checked{% endif %}>
+        <span class="player-name">{{ name }}</span> <span class="muted">maks {{ game.max_wager(p) }}</span>
+      </label>
+      {% endfor %}
+    </div>
+    <label class="dd-amount">Innsats
+      <input type="number" name="amount" min="{{ min_wager }}" step="1" required inputmode="numeric"
+             value="{{ form.get('amount', '') if form else '' }}">
+    </label>
+    {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+    <button class="dd-go">Vis spørsmålet</button>
+  </form>
+</main>
+{% endblock %}

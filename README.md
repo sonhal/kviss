@@ -24,6 +24,15 @@ You add quizzes by uploading JSON to the API (see [Managing quizzes](#managing-q
   - ✓ adds the question's value and sends you back to the board.
   - ✗ subtracts the value. That player is locked out of the question and the others can still try.
   - **Nobody** closes the question with no change to any score.
+- **Dagens dobbel** (Daily Double, optional): tick **Med Dagens dobbel** on **Nytt spill** and choose how many
+  (1–10). When the game starts, the app hides them behind random tiles, in different categories as on the TV show.
+  Nobody knows where they are, not even the host: the board, the host view and the admin page look the same as
+  in any other game. Opening one shows **DAGENS DOBBEL!** instead of the question. The host taps the team that
+  picked the tile and types its bet: at least 5, and at most the team's whole score, or the board's highest value
+  if the score is lower than that. Then the question appears, and only that team answers: ✓ adds the bet,
+  ✗ subtracts it and ends the question. **Angre** takes back the answer, and then the bet. Results pages mark the
+  Daily Doubles that were found, and every one once the game has ended. **Nullstill spill** hides them on new
+  tiles. The music check on the admin page (`?test=1`) never shows a Daily Double and can't score.
 - **Resultat** (`/resultat/<id>`): one game's final ranking, when it started and ended, and a grid of every
   question showing who answered it right (✓), wrong (✗), nobody, or that it was never played. Opened from the
   landing page or the admin history.

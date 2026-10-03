@@ -43,6 +43,8 @@
             <td class="{% if not g.is_used(c, r) %}unplayed{% elif w is none %}no-winner{% endif %}"
                 title="{{ cat.questions[r].question }} – {{ cat.questions[r].answer }}">
               <span class="gold">{{ cat.questions[r].value }}</span>
+              {% if g.daily_double_shown(c, r) %}{% set bet = g.wager(c, r) %}
+              <span class="results-dd">Dagens dobbel{% if bet %} · satset {{ bet.amount }}{% endif %}</span>{% endif %}
               {% if not g.is_used(c, r) %}<span class="muted">–</span>
               {% elif w is not none %}<span>✓ {{ g.quiz.players[w] }}</span>
               {% else %}<span class="muted">Ingen</span>{% endif %}
@@ -57,7 +59,8 @@
         </tbody>
       </table>
     </div>
-    <p class="muted">✓ svarte riktig · ✗ svarte feil · – ikke spilt.</p>
+    <p class="muted">✓ svarte riktig · ✗ svarte feil · – ikke spilt.
+      {%- if g.state.daily_doubles and not g.ended_at %} Dagens dobbel som ikke er funnet ennå, vises ikke.{% endif %}</p>
   </section>
 </main>
 {% endblock %}

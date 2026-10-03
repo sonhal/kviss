@@ -17,6 +17,15 @@
       <label for="players"><h2>Deltakere</h2></label>
       <p class="muted">Ett lag eller én person per linje.</p>
       <textarea id="players" name="players" rows="4" required autofocus>{{ players }}</textarea>
+      <h2>Dagens dobbel</h2>
+      <p class="muted">Skjult bak tilfeldige ruter. Ingen vet hvor, heller ikke du. Den som finner en, satser
+        poeng og svarer alene.</p>
+      <div class="dd-options">
+        <label><input type="checkbox" name="daily_double" value="yes"{% if daily_double %} checked{% endif %}>
+          Med Dagens dobbel</label>
+        <label>Antall <input type="number" name="daily_doubles" min="1" max="{{ [10, chosen.questions]|min }}"
+          step="1" value="{{ daily_doubles|default(1) }}" inputmode="numeric"></label>
+      </div>
       {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
       {% if game and game.in_progress() %}
       <label class="confirm"><input type="checkbox" name="confirm" value="yes" required>

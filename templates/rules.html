@@ -8,7 +8,7 @@
 </header>
 
 <main class="rules">
-  <ol class="rule-cards">
+  <ol class="rule-cards{% if game.state.daily_doubles %} wide{% endif %}">
     <li class="rule">
       <span class="rule-icon" aria-hidden="true">🎯</span>
       <h2>Velg</h2>
@@ -29,6 +29,14 @@
       <h2>Feil</h2>
       <p>Poengene trekkes fra, og du kan ikke svare igjen. De andre får prøve. Minuspoeng er mulig!</p>
     </li>
+    {% if game.state.daily_doubles %}
+    <li class="rule rule-dd">
+      <span class="rule-icon" aria-hidden="true">🎲</span>
+      <h2>Dagens dobbel</h2>
+      <p>{{ game.state.daily_doubles|length }} {{ 'rute skjuler' if game.state.daily_doubles|length == 1 else 'ruter skjuler' }}
+        Dagens dobbel. Finner du en, satser du poeng og svarer alene.</p>
+    </li>
+    {% endif %}
     <li class="rule">
       <span class="rule-icon" aria-hidden="true">🤷</span>
       <h2>Ingen</h2>

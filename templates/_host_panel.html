@@ -5,6 +5,11 @@
   {% elif current %}
   <p class="host-game">{{ game.name }}</p>
   <p class="host-meta">{{ current.category }} · <span class="gold">{{ current.q.value }}</span></p>
+  {% if current.daily_double %}
+  <p class="host-dd">Dagens dobbel!
+    {% if current.wager %}{{ quiz.players[current.wager.player] }} satser <span class="gold">{{ current.wager.amount }}</span>
+    {%- else %}<span class="muted">Venter på innsats.</span>{% endif %}</p>
+  {% endif %}
   <p class="host-question">{{ current.q.question }}</p>
   {% if current.q.youtube or current.q.audio %}
   {% set q = current.q %}
