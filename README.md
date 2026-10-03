@@ -6,8 +6,8 @@ Everything still works if that script fails to load.
 The screens are in Norwegian (bokmål); code, config keys and docs are in English.
 
 Quizzes are stored in a SQLite database (`kviss.db`) and can be played again and again with different players.
-You add quizzes by uploading JSON to the API (see [Managing quizzes](#managing-quizzes)), and pick one on
-**Nytt spill** before each game.
+You add quizzes by uploading JSON files on **Last opp kviss** (`/last-opp`) or through the API (see
+[Managing quizzes](#managing-quizzes)), and pick one on **Nytt spill** before each game.
 
 - **Landing page** (`/`, where the home-screen icon opens): the game on the TV right now, with its standings and a
   **Fortsett** button back to the board, a **Nytt spill** button, and **Tidligere spill**, the last 50 finished
@@ -18,6 +18,11 @@ You add quizzes by uploading JSON to the API (see [Managing quizzes](#managing-q
   many times each quiz has been played and when. Starting a game ends the one on the TV. If that game was
   half-way through you have to tick a box first. A game where nothing was scored is just dropped. The others are
   kept in the history. When the podium is showing, the top bar gets a **Nytt spill** button.
+- **Last opp kviss** (`/last-opp`, linked from the landing page, **Nytt spill** and admin): upload one or more quiz
+  JSON files from the browser. The page explains the format in Norwegian, with a downloadable template
+  (`static/kviss-mal.json`) and a prompt for making questions with an AI. Each file is checked like an API upload:
+  a valid one is saved (or replaces the quiz with the same slug) and links straight to starting a game, a broken
+  one is listed with every problem and changes nothing.
 - **Board** (`/brett`): categories, point values, and live scores. Questions that have been played go dark.
 - **Question** (`/q/<cat>/<row>`): the question in big text. Tap **Show answer** to reveal the answer to the room.
   Each player has ✓ / ✗ buttons:
@@ -71,6 +76,12 @@ Sport, Musikk, Underholdning, Godt og Blandet). After that, the database is the 
 Each quiz has a **slug**, a short name like `fredagskviss`. It is made from the title (`"Fredagskviss på Bærum"`
 → `fredagskviss-pa-baerum`), or you can set it yourself with a `"slug"` field. **Uploading a quiz with a slug that
 already exists replaces it.** That is how you fix a typo. To keep both, give the new one another title or slug.
+
+### Uploading from the browser
+
+Open **Last opp kviss** (`/last-opp`), pick one or more `.json` files and tap **Last opp**. The checks, the
+1 MB limit (for all the files together) and the replace-by-slug rule are the same as for the API below. Audio files
+for music questions still have to be copied to the server first.
 
 ### The API
 
@@ -462,7 +473,7 @@ folder), `KVISS_CONFIG` (quiz imported on first start) and `KVISS_TZ` (time zone
   Without HTTPS, the Basic Auth password would travel in plain text.
 - POSTs whose `Origin` header points at a different site are rejected, which blocks cross-site form
   attacks (CSRF) from other pages open in the same browser.
-- The quiz API needs the password like every other page. Request bodies over 1 MB are refused (`413`). Further
+- The quiz API and the upload page need the password like every other page. Request bodies over 1 MB are refused (`413`). Further
   protection of `/api/` (rate limits, IP allow-lists) belongs in the Caddy config in front of the app.
 - All input is parsed by Pydantic models in `schemas.py` before the app uses it. An upload is checked in full
   before anything is written. Quiz JSON is checked strictly (no type coercion, no unknown fields, no

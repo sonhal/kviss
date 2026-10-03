@@ -27,6 +27,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from flask import (Flask, Response, abort, jsonify, redirect, render_template, request, send_from_directory,
                    url_for)
+from werkzeug.exceptions import RequestEntityTooLarge
 
 from schemas import (AdjustForm, ConfigError, ConfirmForm, FormError, JudgeForm, NewGameForm, UndoForm, parse_form,
                      parse_quiz)
@@ -574,6 +575,42 @@ def create_app(db_path=None, password=None, media_dir=None, seed=None):
         if kviss.start(slug, entry.players, entry.name) is None:  # deleted in the meantime
             abort(404)
         return redirect(url_for("board"))
+
+    # --- uploading quizzes from the browser ------------------------------------
+
+    def read_quiz_upload(upload):
+        """One uploaded file: the saved quiz, or an error the page shows next to the file name."""
+        result = {"file": upload.filename or "(uten navn)", "problems": []}
+        try:
+            data = json.loads(upload.read())
+        except (json.JSONDecodeError, UnicodeDecodeError) as e:
+            result["problems"] = [f"Ikke gyldig JSON: {e}"]
+            return result
+        except RecursionError:
+            result["problems"] = ["Ikke gyldig JSON: for dypt nøstet"]
+            return result
+        try:
+            quiz = validate_quiz(data, kviss.media_dir)
+        except ConfigError as e:
+            result["problems"] = e.problems
+            return result
+        result["created"] = store.save_quiz(quiz)
+        result["quiz"] = store.quiz(quiz["slug"])
+        return result
+
+    @app.route("/last-opp", methods=["GET", "POST"])
+    def upload_quiz():
+        if request.method == "GET":
+            return render_template("upload.html")
+        try:
+            uploads = [f for f in request.files.getlist("files") if f.filename]
+        except RequestEntityTooLarge:
+            return render_template("upload.html", error="Filene er for store (maks 1 MB til sammen)."), 413
+        if not uploads:
+            return render_template("upload.html", error="Velg minst én JSON-fil."), 400
+        results = [read_quiz_upload(f) for f in uploads]
+        status = 400 if all(r["problems"] for r in results) else 200
+        return render_template("upload.html", results=results), status
 
     # --- admin -------------------------------------------------------------
 

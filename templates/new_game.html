@@ -27,8 +27,9 @@
       {% endfor %}
     </ul>
     {% else %}
-    <p>Ingen kviss er lagt inn ennå. Last opp en JSON-fil til <code>{{ url_for('api_quizzes') }}</code>, se README.</p>
+    <p>Ingen kviss er lagt inn ennå.</p>
     {% endif %}
+    <p><a class="tool" href="{{ url_for('upload_quiz') }}">＋ Last opp en kviss</a></p>
   </section>
 </main>
 {% endblock %}

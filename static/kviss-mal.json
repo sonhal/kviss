@@ -1,0 +1,21 @@
+{
+  "title": "Min kviss",
+  "categories": [
+    {
+      "name": "Geografi",
+      "questions": [
+        { "value": 100, "question": "Dette er hovedstaden i Norge.", "answer": "Oslo" },
+        { "value": 200, "question": "Denne elva er Norges lengste.", "answer": "Glomma" },
+        { "value": 300, "question": "Dette fjellet er Norges høyeste.", "answer": "Galdhøpiggen" }
+      ]
+    },
+    {
+      "name": "Musikk",
+      "questions": [
+        { "value": 100, "question": "Hva heter låta?", "answer": "Take On Me",
+          "youtube": "djV11Xbc914", "start": 50, "end": 65 },
+        { "value": 200, "question": "Dette bandet ga ut «Take On Me» i 1985.", "answer": "a-ha" }
+      ]
+    }
+  ]
+}
