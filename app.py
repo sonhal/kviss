@@ -18,6 +18,7 @@ import mimetypes
 import os
 import secrets
 import sqlite3
+import subprocess
 import sys
 import threading
 from contextlib import contextmanager
@@ -41,6 +42,19 @@ MAX_UPLOAD = 1024 * 1024  # bytes; a big quiz is well under 100 kB
 
 def _env_path(name, default):
     return Path(os.environ.get(name) or default)
+
+
+def app_version():
+    """The version shown in the footer: KVISS_VERSION (the Docker image sets it to the release tag), else
+    `git describe` for a git checkout (the systemd deploy), else None."""
+    if version := os.environ.get("KVISS_VERSION"):
+        return version
+    try:
+        out = subprocess.run(["git", "describe", "--tags", "--always", "--dirty"], cwd=BASE_DIR,
+                             capture_output=True, text=True, timeout=5, check=True)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return out.stdout.strip() or None
 
 
 def default_db():
@@ -624,6 +638,7 @@ def create_app(db_path=None, password=None, media_dir=None, seed=None):
                     app.logger.warning("Not importing %s: %s", path, e)
     kviss = Kviss(store, media_dir)
     app.config["KVISS"] = kviss
+    version = app_version()
 
     @app.before_request
     def guard():
@@ -673,7 +688,7 @@ def create_app(db_path=None, password=None, media_dir=None, seed=None):
     @app.get("/")
     def home():
         past = [Game(row) for row in store.games(limit=50, ended=True)]
-        return render_template("home.html", past=past)
+        return render_template("home.html", past=past, version=version)
 
     @app.get("/resultat/<int:game_id>")
     def results(game_id):

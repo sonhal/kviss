@@ -60,5 +60,7 @@
     <p class="muted">Ingen ferdige spill ennå.</p>
     {% endif %}
   </section>
+
+  {% if version %}<footer class="home-version muted">Kviss {{ version }}</footer>{% endif %}
 </main>
 {% endblock %}
