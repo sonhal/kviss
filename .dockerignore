@@ -14,3 +14,8 @@ deploy
 Dockerfile
 compose.yaml
 .dockerignore
+scripts
+ruff.toml
+.ruff_cache
+AGENTS.md
+CLAUDE.md

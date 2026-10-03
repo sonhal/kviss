@@ -8,3 +8,4 @@ media/
 kviss.db
 kviss.db-*
 .env
+.ruff_cache/
