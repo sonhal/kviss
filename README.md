@@ -9,16 +9,22 @@ Quizzes are stored in a SQLite database (`kviss.db`) and can be played again and
 You add quizzes by uploading JSON to the API (see [Managing quizzes](#managing-quizzes)), and pick one on
 **Nytt spill** before each game.
 
+- **Landing page** (`/`, where the home-screen icon opens): the game on the TV right now, with its standings and a
+  **Fortsett** button back to the board, a **Nytt spill** button, and **Tidligere spill**, the last 50 finished
+  games with their date, winner and how far they got. Pages that need a game send you here when none is running.
 - **Nytt spill** (`/nytt`): pick a stored quiz, then type the teams or players, one per line. The list shows how
   many times each quiz has been played and when. Starting a game ends the one on the TV. If that game was
   half-way through you have to tick a box first. A game where nothing was scored is just dropped. The others are
   kept in the history. When the podium is showing, the top bar gets a **Nytt spill** button.
-- **Board** (`/`): categories, point values, and live scores. Questions that have been played go dark.
+- **Board** (`/brett`): categories, point values, and live scores. Questions that have been played go dark.
 - **Question** (`/q/<cat>/<row>`): the question in big text. Tap **Show answer** to reveal the answer to the room.
   Each player has ✓ / ✗ buttons:
   - ✓ adds the question's value and sends you back to the board.
   - ✗ subtracts the value. That player is locked out of the question and the others can still try.
   - **Nobody** closes the question with no change to any score.
+- **Resultat** (`/resultat/<id>`): one game's final ranking, when it started and ended, and a grid of every
+  question showing who answered it right (✓), wrong (✗), nobody, or that it was never played. Opened from the
+  landing page or the admin history.
 - **Regler** (`/regler`): a one-screen summary of the rules in Norwegian for the contestants, linked from the top bar.
 - **Vertsvisning** (`/vert`): open this on a **second device** to see the answer while you host. It follows the TV
   live, updating about a second after you open a question. It shows the question, the answer in large text, who
@@ -30,7 +36,7 @@ You add quizzes by uploading JSON to the API (see [Managing quizzes](#managing-q
   See [Music questions](#music-questions).
 - **Admin** (`⚙`, `/admin`): start a new game, adjust scores by hand, undo, and reset the game. It also lists
   every music question, so you can test that each clip plays before the game. **Historikk** lists the last 20
-  games with their quiz, date and final standings.
+  games with their quiz, date and final standings, each linking to its results page.
 - **Undo** reverts the last scoring action (up to 50 steps), for when you mis-tap.
 - When every question has been played, the board switches to a **Kahoot-style podium**. **You control the
   reveal:** tap the screen (or the pulsing **Avslør …** button) to raise 3rd place, tap again for 2nd, and once

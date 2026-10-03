@@ -1,7 +1,7 @@
 <div class="host-panel" data-version="{{ version }}">
   {% if not game %}
   <p class="host-idle">Ingen spill pågår</p>
-  <p class="host-progress">Start et spill fra ⚙ Admin → Nytt spill.</p>
+  <p class="host-progress">Start et spill fra startsiden.</p>
   {% elif current %}
   <p class="host-meta">{{ current.category }} · <span class="gold">{{ current.q.value }}</span></p>
   <p class="host-question">{{ current.q.question }}</p>

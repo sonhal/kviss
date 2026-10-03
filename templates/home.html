@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Kviss{% endblock %}
+{% block body_class %}page-admin page-home{% endblock %}
+{% block content %}
+<header class="topbar">
+  <h1>Kviss</h1>
+  <nav><a class="tool" href="{{ url_for('admin') }}" aria-label="Admin">⚙</a></nav>
+</header>
+
+<main class="admin home">
+  <div class="home-actions">
+    <section class="home-card">
+      <h2>Pågående spill</h2>
+      {% if game %}
+      <p><strong>{{ quiz.title }}</strong><br>
+        <span class="muted">Startet {{ game.started_at|when }} ·
+          {{ game.state.used|length }} av {{ game.total_questions() }} spørsmål spilt</span></p>
+      <ol class="home-standings">
+        {% for p in game.standings() %}
+        <li>{{ p.place }}. {{ p.name }} <strong{% if p.score < 0 %} class="negative"{% endif %}>{{ p.score }}</strong></li>
+        {% endfor %}
+      </ol>
+      <a class="home-btn" href="{{ url_for('board') }}">
+        {%- if game.is_over() %}Se sluttresultat →{% else %}Fortsett →{% endif %}</a>
+      {% else %}
+      <p class="muted">Ingen spill pågår.</p>
+      {% endif %}
+    </section>
+
+    <section class="home-card">
+      <h2>Nytt spill</h2>
+      <p class="muted">Velg en kviss og skriv inn deltakerne.
+        {%- if game and game.in_progress() %} Spillet som pågår lagres i historikken.{% endif %}</p>
+      <a class="home-btn start" href="{{ url_for('new_game') }}">Nytt spill →</a>
+    </section>
+  </div>
+
+  <section>
+    <h2>Tidligere spill</h2>
+    {% if past %}
+    <ul class="quiz-list">
+      {% for g in past %}
+      {% set played = g.state.used|length %}
+      {% set total = g.total_questions() %}
+      <li>
+        <a class="quiz-pick" href="{{ url_for('results', game_id=g.id) }}">
+          <strong>{{ g.quiz.title }}</strong>
+          <span>🏆 {{ g.standings()|selectattr('place', 'equalto', 1)|map(attribute='name')|join(' og ') }}
+            <span class="gold">{{ g.standings()[0].score }}</span></span>
+          <span class="muted">{{ g.started_at|when }} · {{ g.quiz.players|length }} deltakere ·
+            {% if played < total %}avsluttet etter {{ played }} av {{ total }} spørsmål{% else %}alle {{ total }} spørsmål spilt{% endif %}</span>
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">Ingen ferdige spill ennå.</p>
+    {% endif %}
+  </section>
+</main>
+{% endblock %}

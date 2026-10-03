@@ -582,3 +582,53 @@ a.cell:active { transform: scale(0.96); }
 .form-error { color: #ff8a80; font-weight: 700; }
 .history li { margin-bottom: 0.8rem; line-height: 1.5; }
 .history strong { color: var(--gold); }
+
+/* --- landing page and results ------------------------------------------ */
+
+.home-actions { display: flex; flex-wrap: wrap; gap: 1rem; max-width: 900px; margin-bottom: 1rem; }
+.home-card {
+  flex: 1 1 260px;
+  display: flex;
+  flex-direction: column;
+  margin: 0 !important;
+  padding: 0.2rem 1rem 1rem;
+  border-radius: 6px;
+  background: var(--used);
+}
+.home-card p { margin-top: 0; }
+.home-standings { list-style: none; padding: 0; margin: 0 0 1rem; line-height: 1.6; }
+.home-standings strong { color: var(--gold); }
+.home-standings strong.negative { color: #ff6b6b; }
+.home-btn {
+  margin-top: auto;
+  padding: 0.7em 1em;
+  border-radius: 6px;
+  background: var(--tile);
+  font-size: 1.15em;
+  font-weight: 700;
+  text-align: center;
+}
+.home-btn:hover, .home-btn:active { background: var(--tile-hover); }
+.home-btn.start { background: var(--ok); }
+.home-btn.start:hover, .home-btn.start:active { filter: brightness(1.15); }
+
+.results-ranking { list-style: none; padding: 0; margin: 0; font-size: 1.15em; line-height: 1.7; }
+.results-ranking .rest-place { display: inline-block; min-width: 1.8em; color: var(--muted); }
+.results-ranking strong { margin-left: 0.3rem; color: var(--gold); }
+.results-ranking strong.negative { color: #ff6b6b; }
+.results-ranking .place-1 { font-weight: 700; }
+.admin section.results-wide { max-width: none; }
+.results-scroll { overflow-x: auto; }
+.results-board { border-collapse: separate; border-spacing: 4px; min-width: 100%; }
+.results-board th { padding: 0.4rem; color: var(--gold); font-size: 0.9em; text-transform: uppercase; }
+.results-board td {
+  padding: 0.4rem 0.5rem;
+  border-radius: 4px;
+  background: var(--tile);
+  vertical-align: top;
+  line-height: 1.35;
+}
+.results-board td span { display: block; }
+.results-board td.no-winner, .results-board td.unplayed { background: var(--used); }
+.results-board td.empty { background: transparent; }
+.results-wrong { color: #ff8a80; font-size: 0.85em; }

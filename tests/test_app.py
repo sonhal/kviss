@@ -61,7 +61,7 @@ class KvissTest(unittest.TestCase):
         load_quiz(BASE_DIR / "quiz-example.json")
 
     def test_board_renders_and_escapes(self):
-        self.assertEqual(self.client.get("/").status_code, 200)
+        self.assertEqual(self.client.get("/brett").status_code, 200)
         page = self.client.get("/q/1/0").get_data(as_text=True)
         self.assertNotIn("<script>x", page)
         self.assertIn("&lt;script&gt;", page)
@@ -79,7 +79,7 @@ class KvissTest(unittest.TestCase):
         self.judge(0, 1, "correct", 1)
         for c, r in [(0, 0), (1, 0)]:
             self.judge(c, r, "nobody")
-        page = self.client.get("/").get_data(as_text=True)
+        page = self.client.get("/brett").get_data(as_text=True)
         self.assertIn("step slot-1 rank-1", page)
         self.assertNotIn('class="scores"', page)
 
@@ -89,7 +89,7 @@ class KvissTest(unittest.TestCase):
         self.judge(0, 1, "wrong", 0)  # same player can't answer twice
         self.assertEqual(self.game.state["scores"], [-200, 0])
         resp = self.judge(0, 1, "correct", 1)
-        self.assertEqual(resp.headers["Location"], "/")
+        self.assertEqual(resp.headers["Location"], "/brett")
         self.assertEqual(self.game.state["scores"], [-200, 200])
         self.judge(0, 1, "correct", 0)  # question already used
         self.assertEqual(self.game.state["scores"], [-200, 200])
@@ -101,7 +101,7 @@ class KvissTest(unittest.TestCase):
         self.assertFalse(self.game.is_used(0, 0))
         for c, r in [(0, 0), (0, 1), (1, 0)]:
             self.judge(c, r, "nobody")
-        self.assertIn("Sluttresultat", self.client.get("/").get_data(as_text=True))
+        self.assertIn("Sluttresultat", self.client.get("/brett").get_data(as_text=True))
 
     def test_state_survives_restart(self):
         self.judge(0, 0, "correct", 1)
@@ -127,7 +127,7 @@ class KvissTest(unittest.TestCase):
         page = self.client.get("/regler").get_data(as_text=True)
         self.assertIn("Slik spiller vi", page)
         self.assertIn("2 kategorier · 3 spørsmål", page)
-        self.assertIn('href="/regler"', self.client.get("/").get_data(as_text=True))
+        self.assertIn('href="/regler"', self.client.get("/brett").get_data(as_text=True))
 
     def test_host_view_follows_tv(self):
         self.assertIn("Brettet vises", self.client.get("/vert").get_data(as_text=True))
@@ -141,7 +141,7 @@ class KvissTest(unittest.TestCase):
         panel = self.client.get(f"/vert/panel?v={v}")
         self.assertEqual(panel.status_code, 200)
         self.assertIn("Feil: A", panel.get_data(as_text=True))
-        self.client.get("/")  # TV back on the board
+        self.client.get("/brett")  # TV back on the board
         self.assertIn("Brettet vises", self.client.get("/vert/panel").get_data(as_text=True))
 
     def test_bad_config_message(self):
@@ -233,13 +233,17 @@ class KvissTest(unittest.TestCase):
 
     # --- quiz library and games ----------------------------------------------
 
-    def test_no_game_goes_to_new_game_screen(self):
+    def test_no_game_goes_to_landing_page(self):
         self.db.unlink()
         client = self.make_client()
         self.assertIsNone(self.game)
-        self.assertEqual(client.get("/").headers["Location"], "/nytt")
-        self.assertEqual(client.get("/q/0/0").headers["Location"], "/nytt")
-        self.assertEqual(client.post("/undo").headers["Location"], "/nytt")
+        self.assertEqual(client.get("/brett").headers["Location"], "/")
+        self.assertEqual(client.get("/q/0/0").headers["Location"], "/")
+        self.assertEqual(client.post("/undo").headers["Location"], "/")
+        home = client.get("/").get_data(as_text=True)
+        self.assertIn("Ingen spill pågår", home)
+        self.assertIn('href="/nytt"', home)
+        self.assertIn("Ingen ferdige spill", home)
         self.assertIn("Ingen kviss er lagt inn", client.get("/nytt").get_data(as_text=True))
         self.assertIn("Ingen spill pågår", client.get("/vert").get_data(as_text=True))
         self.assertIn("Ingen spill pågår", client.get("/admin").get_data(as_text=True))
@@ -262,20 +266,66 @@ class KvissTest(unittest.TestCase):
         self.judge(0, 0, "correct", 0)
         for c, r in [(0, 1), (1, 0)]:
             self.judge(c, r, "nobody")
-        self.assertIn("Nytt spill", self.client.get("/").get_data(as_text=True))  # podium links to it
+        self.assertIn("Nytt spill", self.client.get("/brett").get_data(as_text=True))  # podium links to it
         first = self.game.id
         resp = self.start("test", ["Ola", "Kari", "Per"])
-        self.assertEqual(resp.headers["Location"], "/")
+        self.assertEqual(resp.headers["Location"], "/brett")
         self.assertNotEqual(self.game.id, first)
         self.assertEqual(self.game.quiz["players"], ["Ola", "Kari", "Per"])
         self.assertEqual(self.game.state["scores"], [0, 0, 0])
-        self.assertIn("Ola", self.client.get("/").get_data(as_text=True))
+        self.assertIn("Ola", self.client.get("/brett").get_data(as_text=True))
         admin = self.client.get("/admin").get_data(as_text=True)
         self.assertIn("1. A <strong>100</strong> · 2. B <strong>0</strong>", admin)
         self.assertIn("(pågår)", admin)
         with sqlite3.connect(self.db) as db:
             ended = db.execute("SELECT ended_at IS NOT NULL FROM games ORDER BY id").fetchall()
         self.assertEqual(ended, [(1,), (0,)])
+
+    def test_landing_page_shows_current_and_past_games(self):
+        home = self.client.get("/").get_data(as_text=True)
+        self.assertIn("Pågående spill", home)
+        self.assertIn("0 av 3 spørsmål spilt", home)
+        self.assertIn('href="/brett">Fortsett →', home)
+        self.assertIn('href="/nytt"', home)
+        self.assertIn("Ingen ferdige spill", home)  # the current game isn't listed as a past one
+        self.judge(0, 0, "correct", 1)
+        first = self.game.id
+        self.start("test", ["C", "D"], confirm="yes")
+        home = self.client.get("/").get_data(as_text=True)
+        self.assertIn(f'href="/resultat/{first}"', home)
+        self.assertIn("🏆 B", home)
+        self.assertIn("avsluttet etter 1 av 3 spørsmål", home)
+        for c, r in [(0, 0), (0, 1), (1, 0)]:
+            self.judge(c, r, "nobody")
+        self.assertIn('href="/brett">Se sluttresultat →', self.client.get("/").get_data(as_text=True))
+
+    def test_landing_page_names_every_tied_winner(self):
+        self.judge(0, 0, "correct", 0)
+        self.judge(1, 0, "correct", 1)
+        self.start("test", ["C", "D"], confirm="yes")
+        self.assertIn("🏆 A og B", self.client.get("/").get_data(as_text=True))
+
+    def test_results_page(self):
+        self.judge(0, 0, "wrong", 0)
+        self.judge(0, 0, "correct", 1)
+        self.judge(0, 1, "nobody")
+        first = self.game.id
+        page = self.client.get(f"/resultat/{first}").get_data(as_text=True)
+        self.assertIn("pågår", page)  # the current game, read live
+        self.assertIn('href="/brett">Fortsett', page)
+        self.start("test", ["C", "D"], confirm="yes")
+        page = self.client.get(f"/resultat/{first}").get_data(as_text=True)
+        self.assertIn("avsluttet", page)
+        self.assertNotIn("Fortsett", page)
+        self.assertIn("1.</span> B", page)
+        self.assertIn('class="negative">-100', page)
+        self.assertIn("✓ B", page)
+        self.assertIn("✗ A", page)
+        self.assertIn("Ingen", page)  # (0, 1): nobody
+        self.assertIn('class="unplayed"', page)  # (1, 0) was never played
+        self.assertIn("&lt;script&gt;", page)  # question text is escaped in the tooltip
+        self.assertIn(f'href="/resultat/{first}"', self.client.get("/admin").get_data(as_text=True))
+        self.assertEqual(self.client.get("/resultat/999").status_code, 404)
 
     def test_untouched_game_is_not_kept(self):
         self.start("test", ["C", "D"])
