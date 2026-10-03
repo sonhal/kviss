@@ -3,6 +3,7 @@
   <p class="host-idle">Ingen spill pågår</p>
   <p class="host-progress">Start et spill fra startsiden.</p>
   {% elif current %}
+  <p class="host-game">{{ game.name }}</p>
   <p class="host-meta">{{ current.category }} · <span class="gold">{{ current.q.value }}</span></p>
   <p class="host-question">{{ current.q.question }}</p>
   {% if current.q.youtube or current.q.audio %}
@@ -20,6 +21,7 @@
   <p class="host-status bad">✗ Feil: {{ current.wrong|join(", ") }}</p>
   {% endif %}
   {% elif game.is_over() %}
+  <p class="host-game">{{ game.name }}</p>
   <p class="host-idle">Spillet er ferdig</p>
   <ol class="host-ranking">
     {% for p in game.standings() %}
@@ -27,6 +29,7 @@
     {% endfor %}
   </ol>
   {% else %}
+  <p class="host-game">{{ game.name }}</p>
   <p class="host-idle">Brettet vises</p>
   <p class="host-progress">{{ game.state.used|length }} av {{ game.total_questions() }} spørsmål spilt.
     Velg et spørsmål på TV-en, så dukker svaret opp her.</p>
