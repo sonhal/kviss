@@ -21,6 +21,7 @@
           <strong>{{ q.title }}</strong>
           <span class="muted">{{ q.categories|length }} {{ "kategori" if q.categories|length == 1 else "kategorier" }} · {{ q.questions }} spørsmål
             {%- if q.music %} · {{ q.music }} med musikk{% endif %}
+            {%- if q.final %} · finale{% endif %}
             · {% if q.plays %}spilt {{ q.plays }} {{ 'gang' if q.plays == 1 else 'ganger' }}, sist {{ q.last_played|when }}{% else %}aldri spilt{% endif %}</span>
         </a>
       </li>

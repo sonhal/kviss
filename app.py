@@ -842,7 +842,7 @@ def create_app(db_path=None, password=None, media_dir=None, seed=None):
             players = chosen["players"] or store.last_players()
             name = f"{chosen['title']} · {datetime.now(tz):%d.%m.%Y}"  # a suggestion the host can change
             return render_template("new_game_players.html", chosen=chosen, name=name, players="\n".join(players),
-                                   with_final=True, final_seconds=store.last_final_seconds() or FINAL_SECONDS)
+                                   with_final=False, final_seconds=store.last_final_seconds() or FINAL_SECONDS)
         try:
             entry = parse_form(NewGameForm, request.form.to_dict())
             if entry.daily_doubles > chosen["questions"]:

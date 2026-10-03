@@ -39,9 +39,9 @@ You add quizzes by uploading JSON files on **Last opp kviss** (`/last-opp`) or t
   ✗ subtracts it and ends the question. **Angre** takes back the answer, and then the bet. Results pages mark the
   Daily Doubles that were found, and every one once the game has ended. **Nullstill spill** hides them on new
   tiles. The music check on the admin page (`?test=1`) never shows a Daily Double and can't score.
-- **Finale** (Final Jeopardy, for quizzes with a [`final`](#the-quiz-format) question): ticked by default on
-  **Nytt spill**, where you also set the countdown (30 seconds by default; the next game suggests the time you
-  used last). When the board is empty, the TV shows the final's category instead of the podium, and which teams
+- **Finale** (Final Jeopardy, for quizzes with a [`final`](#the-quiz-format) question): tick **Med finale** on
+  **Nytt spill** and set the countdown (30 seconds by default; the next game suggests the time you used last).
+  For a quiz without a final question the box is greyed out, and the quiz list marks the quizzes that have one. When the board is empty, the TV shows the final's category instead of the podium, and which teams
   play: everyone above 0 points. Teams write their bet (0 up to their whole score) and their answer on paper.
   **Vis spørsmålet** shows the question with the countdown, and teams write their answer and turn the paper face
   down. **Skriv inn innsatsene** then lets the host type in every team's bet (checked against its score), and only

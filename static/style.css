@@ -745,6 +745,8 @@ a.cell:active { transform: scale(0.96); }
 }
 .players-form .confirm { display: block; margin-bottom: 1rem; }
 .dd-options { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 1.5rem; margin-bottom: 1.5rem; }
+.dd-options.disabled { opacity: 0.45; }
+.dd-options.disabled label { cursor: not-allowed; }
 .dd-options input[type=number] {
   width: 4.5em;
   margin-left: 0.4rem;

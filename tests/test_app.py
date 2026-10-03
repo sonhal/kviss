@@ -753,17 +753,24 @@ class KvissTest(unittest.TestCase):
         self.assertNotIn("final", self.client.get("/api/quizzes/test").get_json())
 
     def test_new_game_offers_the_final_only_when_the_quiz_has_one(self):
-        self.assertNotIn('name="final"', self.client.get("/nytt/test").get_data(as_text=True))
+        page = self.client.get("/nytt/test").get_data(as_text=True)
+        self.assertIn('name="final" value="yes" disabled>', page)  # greyed out, with the reason
+        self.assertIn("har ikke et finalespørsmål", page)
+        self.assertNotIn("· finale", self.client.get("/nytt").get_data(as_text=True))
         self.upload({**QUIZ, "slug": "finale", "final": self.FINAL})
+        self.assertIn("· finale", self.client.get("/nytt").get_data(as_text=True))
         page = self.client.get("/nytt/finale").get_data(as_text=True)
-        self.assertIn('name="final" value="yes" checked', page)
+        self.assertIn('name="final" value="yes">', page)  # offered, but the host opts in
+        self.assertIn("«Norsk historie»", page)
         self.assertIn('name="final_seconds" min="5" max="600" step="1"\n          value="30"', page)
-        self.start("finale", ["A", "B"], final_seconds="60")  # box not ticked
+        self.start("finale", ["A", "B"], final_seconds="60")  # not ticked
         self.assertIsNone(self.game.state["final"])
         self.start("test", ["A", "B"], final="yes", final_seconds="60")  # no final in that quiz
         self.assertIsNone(self.game.state["final"])
         for seconds in ("4", "601", "x"):
-            self.assertEqual(self.start("finale", ["A", "B"], final="yes", final_seconds=seconds).status_code, 400)
+            resp = self.start("finale", ["A", "B"], final="yes", final_seconds=seconds)
+            self.assertEqual(resp.status_code, 400)
+            self.assertIn('name="final" value="yes" checked>', resp.get_data(as_text=True))  # kept ticked
         self.start_with_final(seconds="60")
         self.assertEqual(self.game.state["final"]["seconds"], 60)
         # The next game suggests the same time.

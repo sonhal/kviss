@@ -26,16 +26,21 @@
         <label>Antall <input type="number" name="daily_doubles" min="1" max="{{ [10, chosen.questions]|min }}"
           step="1" value="{{ daily_doubles|default(1) }}" inputmode="numeric"></label>
       </div>
-      {% if chosen.final %}
       <h2>Finale</h2>
+      {% if chosen.final %}
       <p class="muted">Når brettet er tomt: kategorien «{{ chosen.final.category }}». Alle med over 0 poeng skriver
-        innsats og svar på en lapp, og du taster inn innsatsen når svarene avsløres.</p>
-      <div class="dd-options">
-        <label><input type="checkbox" name="final" value="yes"{% if with_final %} checked{% endif %}> Med finale</label>
-        <label>Tid til å svare <input type="number" name="final_seconds" min="5" max="600" step="1"
-          value="{{ final_seconds }}" inputmode="numeric"> sekunder</label>
-      </div>
+        innsats og svar på en lapp, og du taster inn innsatsene før svaret vises.</p>
+      {% else %}
+      <p class="muted">Denne kvissen har ikke et finalespørsmål. Legg til <code>final</code> i kvissen for å bruke det
+        (se <a class="gold" href="{{ url_for('upload_quiz') }}">Last opp kviss</a>).</p>
       {% endif %}
+      <div class="dd-options{% if not chosen.final %} disabled{% endif %}">
+        <label><input type="checkbox" name="final" value="yes"
+          {%- if with_final and chosen.final %} checked{% endif %}{% if not chosen.final %} disabled{% endif %}>
+          Med finale</label>
+        <label>Tid til å svare <input type="number" name="final_seconds" min="5" max="600" step="1"
+          value="{{ final_seconds }}" inputmode="numeric"{% if not chosen.final %} disabled{% endif %}> sekunder</label>
+      </div>
       {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
       {% if game and game.in_progress() %}
       <label class="confirm"><input type="checkbox" name="confirm" value="yes" required>
