@@ -1,0 +1,4 @@
+# ruff check (CI's Lint job). Run locally: pip install ruff && ruff check .
+# The Debian 12 deploy runs Python 3.11, so don't suggest newer syntax.
+target-version = "py311"
+line-length = 120
