@@ -16,6 +16,7 @@
     <p>{% if game %}På TV-en nå: <strong>{{ game_name }}</strong>{% if game_name != quiz.title %} ({{ quiz.title }}){% endif %}, startet {{ game.started_at|when }}.
       {% else %}Ingen spill pågår.{% endif %}</p>
     <a class="tool" href="{{ url_for('new_game') }}">Velg kviss og deltakere →</a>
+    <a class="tool" href="{{ url_for('upload_quiz') }}">＋ Last opp kviss</a>
   </section>
 
   {% if game %}

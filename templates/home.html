@@ -33,6 +33,7 @@
       <p class="muted">Velg en kviss og skriv inn deltakerne.
         {%- if game and game.in_progress() %} Spillet som pågår lagres i historikken.{% endif %}</p>
       <a class="home-btn start" href="{{ url_for('new_game') }}">Nytt spill →</a>
+      <a class="home-upload muted" href="{{ url_for('upload_quiz') }}">＋ Last opp en kviss</a>
     </section>
   </div>
 

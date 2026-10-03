@@ -582,6 +582,38 @@ a.cell:active { transform: scale(0.96); }
 .players-form .start { min-height: 2.6em; background: var(--ok); }
 .form-error { color: #ff8a80; font-weight: 700; }
 .history li { margin-bottom: 0.8rem; line-height: 1.5; }
+
+/* --- uploading quizzes ---------------------------------------------------- */
+
+.upload-form label { display: block; margin-bottom: 0.6rem; }
+.upload-form input[type=file] {
+  display: block;
+  width: 100%;
+  margin-bottom: 1rem;
+  padding: 0.6rem;
+  border: 1px dashed var(--muted);
+  border-radius: 6px;
+  background: var(--used);
+  color: var(--text);
+  font: inherit;
+}
+.upload-results .upload-failed { padding: 0.8rem 1rem; border-radius: 6px; background: var(--used); }
+.upload-failed strong { color: #ff8a80; }
+.upload-failed ul { margin: 0.4rem 0 0; padding-left: 1.2em; line-height: 1.5; }
+.upload-failed ul li { margin-bottom: 0.2rem; }
+.upload-guide { line-height: 1.5; }
+.upload-guide h3 { margin-bottom: 0.3rem; }
+.upload-guide pre {
+  overflow-x: auto;
+  padding: 0.8rem 1rem;
+  border-radius: 6px;
+  background: var(--used);
+  font-size: 14px;
+  line-height: 1.4;
+}
+.upload-guide code { color: var(--gold); }
+.upload-prompt { margin: 0 0 0.6rem; padding: 0.6rem 1rem; border-left: 3px solid var(--gold); background: var(--used); }
+.home-upload { margin-top: 0.6rem; text-align: center; }
 .history strong { color: var(--gold); }
 
 /* --- landing page and results ------------------------------------------ */

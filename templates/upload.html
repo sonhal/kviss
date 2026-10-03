@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Last opp kviss{% endblock %}
+{% block body_class %}page-admin{% endblock %}
+{% block content %}
+<header class="topbar">
+  <h1>Last opp kviss</h1>
+  <nav>
+    <a class="tool" href="{{ url_for('new_game') }}">← Nytt spill</a>
+    <a class="tool" href="{{ url_for('home') }}" aria-label="Hjem">⌂</a>
+  </nav>
+</header>
+
+<main class="admin">
+  {% if results %}
+  <section aria-live="polite">
+    <h2>Resultat</h2>
+    <ul class="quiz-list upload-results">
+      {% for r in results %}
+      {% if r.problems %}
+      <li class="upload-failed">
+        <strong>✗ {{ r.file }}</strong> <span class="muted">ble ikke lagret:</span>
+        <ul>{% for p in r.problems %}<li>{{ p }}</li>{% endfor %}</ul>
+      </li>
+      {% else %}
+      <li>
+        <a class="quiz-pick" href="{{ url_for('new_game_players', slug=r.quiz.slug) }}">
+          <strong>✓ {{ r.quiz.title }}</strong>
+          <span class="muted">{{ r.file }} · {{ "lagt til" if r.created else "erstattet kvissen med samme navn" }} ·
+            {{ r.quiz.categories|length }} {{ "kategori" if r.quiz.categories|length == 1 else "kategorier" }} · {{ r.quiz.questions }} spørsmål</span>
+          <span>Start et spill med denne →</span>
+        </a>
+      </li>
+      {% endif %}
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  <section>
+    <h2>Last opp</h2>
+    <form method="post" enctype="multipart/form-data" class="players-form upload-form">
+      <label for="files">Velg én eller flere kviss-filer (<code>.json</code>, maks 1 MB til sammen).</label>
+      <input id="files" name="files" type="file" accept=".json,application/json" multiple required>
+      {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+      <button class="start">Last opp</button>
+    </form>
+    <p class="muted">En kviss med samme tittel (eller <code>slug</code>) som en som finnes fra før, erstatter den.
+      Slik retter du en skrivefeil. Spill som er startet, beholder sin egen kopi og endres ikke.</p>
+  </section>
+
+  <section class="upload-guide">
+    <h2>Slik lager du en kviss-fil</h2>
+    <ol>
+      <li>Last ned <a class="gold" href="{{ url_for('static', filename='kviss-mal.json') }}" download="min-kviss.json">malen</a>,
+        eller lag en ny tekstfil som slutter på <code>.json</code>.</li>
+      <li>Åpne den i en teksteditor og bytt ut tittel, kategorier, spørsmål og svar med dine egne.</li>
+      <li>Last opp filen her. Er noe feil, får du en liste over hva som må rettes, og ingenting blir lagret.</li>
+    </ol>
+<pre><code>{
+  "title": "Fredagskviss",
+  "players": ["Lag Rød", "Lag Blå"],
+  "categories": [
+    {
+      "name": "Geografi",
+      "questions": [
+        { "value": 100, "question": "Dette er hovedstaden i Norge.", "answer": "Oslo" },
+        { "value": 200, "question": "...", "answer": "..." }
+      ]
+    }
+  ]
+}</code></pre>
+    <ul>
+      <li><code>title</code>: navnet på kvissen (påkrevd).</li>
+      <li><code>categories</code>: 1–12 kategorier, hver med et <code>name</code> og 1–20 spørsmål.
+        Rundt 6 kategorier × 5 spørsmål passer best på en TV.</li>
+      <li>Hvert spørsmål trenger <code>value</code> (poeng, et helt tall uten anførselstegn: <code>100</code>, ikke
+        <code>"100"</code>), <code>question</code> og <code>answer</code>.</li>
+      <li><code>players</code> (valgfritt): lag eller deltakere som foreslås når du starter et spill.</li>
+      <li>Tekst står i anførselstegn, og det skal være komma mellom elementer, men ikke etter det siste.</li>
+      <li>Feltnavnene skrives nøyaktig som over: en skrivefeil som <code>"anwser"</code> blir avvist.</li>
+    </ul>
+
+    <h3>Musikkspørsmål</h3>
+    <p>Et spørsmål kan spille et klipp fra YouTube. Legg til <code>"youtube"</code> med video-ID-en (de 11 tegnene etter
+      <code>v=</code> i lenken, ikke hele lenken), og eventuelt <code>"start"</code> og <code>"end"</code> i sekunder:</p>
+<pre><code>{ "value": 300, "question": "Hva heter låta?", "answer": "Take On Me",
+  "youtube": "djV11Xbc914", "start": 50, "end": 65 }</code></pre>
+    <p class="muted">Lydfiler (<code>"audio"</code>) må legges på serveren av den som drifter kviss før kvissen
+      lastes opp. Test klippene under ⚙ Admin → Musikk før spillet.</p>
+
+    <h3>La en KI lage spørsmålene</h3>
+    <p>Lim inn dette i ChatGPT, Claude eller lignende, bytt ut emnene og lagre svaret som en <code>.json</code>-fil:</p>
+    <blockquote class="upload-prompt">Lag en Jeopardy-kviss som JSON med nøyaktig denne strukturen:
+      <code>{"title": str, "categories": [{"name": str, "questions": [{"value": int, "question": str, "answer": str}]}]}</code>.
+      Lag 5 kategorier om <strong>&lt;EMNER&gt;</strong>, hver med 5 spørsmål verdt 100, 200, 300, 400 og 500, som blir
+      vanskeligere for hver verdi. Skriv hvert spørsmål som et hint, og hold svaret kort (1–5 ord). Språk: norsk
+      (bokmål). Svar bare med JSON, uten kommentarer.</blockquote>
+    <p class="muted">Sjekk fakta før spillkvelden. En KI finner ofte på YouTube-ID-er som ikke finnes, så legg til
+      musikkspørsmål selv.</p>
+  </section>
+</main>
+{% endblock %}
