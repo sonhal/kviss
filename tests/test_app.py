@@ -796,43 +796,53 @@ class KvissTest(unittest.TestCase):
         self.assertIn("selvstendig", page)
         self.assertIn('data-seconds="30" data-left="30"', page)
         self.assertNotIn("1905", page)
-        # 3. The reveal, one team at a time.
-        self.client.post("/finale/avslor")
+        # 3. Every bet is typed in before the answer is shown.
+        self.client.post("/finale/innsats")
         page = self.client.get("/brett").get_data(as_text=True)
-        self.assertIn('class="clue-answer" hidden>1905', page)  # nobody can change their paper after seeing it
-        self.assertIn('href="/brett?reveal=1">Vis svar', page)
-        self.assertIn('class="clue-answer">1905', self.client.get("/brett?reveal=1").get_data(as_text=True))
-        self.assertIn('name="player" value="1"', page)
-        self.client.post("/finale/svar", data={"player": "0", "wager": "200", "result": "correct"})  # not A's turn
-        self.assertEqual(self.game.state["scores"], [200, 100, -100])
-        resp = self.client.post("/finale/svar", data={"player": "1", "wager": "101", "result": "correct"})
-        self.assertEqual(resp.status_code, 400)
-        self.assertIn("B kan ha satset fra 0 til 100", resp.get_data(as_text=True))
-        resp = self.client.post("/finale/svar", data={"player": "1", "wager": "100", "result": "correct", "reveal": "1"})
-        self.assertEqual(resp.headers["Location"], "/brett?reveal=1")  # shown stays shown
-        self.client.post("/finale/svar", data={"player": "0", "wager": "200", "result": "wrong"})
-        self.assertEqual(self.game.state["scores"], [0, 200, -100])
-        # 4. Every result stays on the TV until the host moves on to the podium, with B the winner.
+        self.assertIn('name="wager-1"', page)
+        self.assertIn('name="wager-0"', page)
+        self.assertNotIn('name="wager-2"', page)  # C is out
+        self.assertNotIn("1905", page)
+        for bets, message in [({"wager-1": "100"}, "A kan ha satset fra 0 til 200"),
+                              ({"wager-1": "101", "wager-0": "200"}, "B kan ha satset fra 0 til 100"),
+                              ({"wager-1": "x", "wager-0": "200"}, "B kan ha satset")]:
+            resp = self.client.post("/finale/vis-svar", data=bets)
+            self.assertEqual(resp.status_code, 400, bets)
+            self.assertIn(message, resp.get_data(as_text=True))
+        self.assertEqual(self.game.final_phase(), "bets")
+        self.client.post("/finale/vis-svar", data={"wager-1": "100", "wager-0": "200"})
+        # 4. The answer, then each team right or wrong, in any order.
+        page = self.client.get("/brett").get_data(as_text=True)
+        self.assertIn("1905", page)
+        self.assertNotIn("Se sluttresultat", page)
+        self.client.post("/finale/svar", data={"player": "0", "result": "wrong"})
+        self.client.post("/finale/svar", data={"player": "0", "result": "correct"})  # a double tap does nothing
+        self.client.post("/finale/svar", data={"player": "2", "result": "correct"})  # C isn't in the final
+        self.assertEqual(self.game.state["scores"], [0, 100, -100])
+        self.client.post("/finale/ferdig")  # B isn't judged yet
         self.assertFalse(self.game.is_over())
+        self.client.post("/finale/svar", data={"player": "1", "result": "correct"})
+        self.assertEqual(self.game.state["scores"], [0, 200, -100])
+        # 5. Every result stays on the TV until the host moves on to the podium, with B the winner.
         page = self.client.get("/brett").get_data(as_text=True)
         self.assertIn('<li class="bad"><span class="player-name">A</span>', page)
-        self.assertIn('class="clue-answer">1905', page)  # everyone is done: the answer is shown
+        self.assertIn("Se sluttresultat", page)
         self.client.post("/finale/ferdig")
         self.assertTrue(self.game.is_over())
         self.assertIn("Sluttresultat", self.client.get("/brett").get_data(as_text=True))
         self.assertEqual(self.game.standings()[0]["name"], "B")
         results = self.client.get(f"/resultat/{self.game.id}").get_data(as_text=True)
-        self.assertIn("✓ riktig, satset <strong>100</strong>", results)
-        self.assertIn("✗ feil, satset <strong>200</strong>", results)
+        self.assertIn("✓ riktig,\n        satset <strong>100</strong>", results)
+        self.assertIn("✗ feil,\n        satset <strong>200</strong>", results)
         # Undo goes back step by step.
         self.client.post("/undo", data={"next": "board"})
         self.assertFalse(self.game.is_over())
         self.client.post("/undo", data={"next": "board"})
-        self.assertEqual(self.game.final_next(), 0)
-        self.assertEqual(self.game.state["scores"], [200, 200, -100])
+        self.assertIsNone(self.game.final_result(1))
+        self.assertEqual(self.game.state["scores"], [0, 100, -100])
         self.client.post("/undo", data={"next": "board"})
         self.client.post("/undo", data={"next": "board"})
-        self.assertEqual(self.game.final_phase(), "question")
+        self.assertEqual(self.game.final_phase(), "bets")
 
     def test_final_is_skipped_when_nobody_is_above_zero(self):
         self.start_with_final()
@@ -856,9 +866,11 @@ class KvissTest(unittest.TestCase):
     def test_final_steps_out_of_order_do_nothing(self):
         self.start_with_final()
         self.client.post("/finale/sporsmal")  # the board isn't empty yet
-        self.client.post("/finale/avslor")
+        self.client.post("/finale/innsats")
+        self.client.post("/finale/vis-svar", data={"wager-0": "0"})
         self.assertEqual(self.game.final_phase(), "category")
         self.assertIn('class="board"', self.client.get("/brett").get_data(as_text=True))
+        self.assertEqual(self.client.post("/finale/svar", data={"player": "0", "result": "maybe"}).status_code, 400)
 
     def test_final_on_rules_page_and_survives_reset(self):
         self.start_with_final(seconds="45")

@@ -342,10 +342,19 @@ a.cell:active { transform: scale(0.96); }
 .finale-teams li.out, .finale-reveal li.waiting { opacity: 0.4; }
 .finale-reveal li.ok { background: var(--ok); }
 .finale-reveal li.bad { background: var(--bad); }
-.finale-reveal li.now { flex-direction: column; outline: 2px solid var(--gold); background: var(--tile); }
-.finale-reveal .form-error { margin: 0; }
+.finale-reveal li.now { outline: 2px solid var(--gold); background: var(--tile); }
+.finale-bets { display: flex; flex-direction: column; align-items: center; gap: 2vmin; }
+.finale-bet {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 0.4em 0.7em;
+  border-radius: 6px;
+  background: var(--tile);
+  font-size: clamp(13px, 3vmin, 26px);
+}
 .finale-judge { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0.5em; }
-.finale-judge input {
+.finale-judge input, .finale-bet input {
   width: 5.5em;
   margin-left: 0.3em;
   padding: 0.2em 0.4em;

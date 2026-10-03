@@ -352,18 +352,9 @@ class WagerForm(_Form):
 
 
 class FinalJudgeForm(_Form):
-    """One team's Final Jeopardy bet and whether their answer was right. Game.judge_final checks the bet."""
+    """Whether one team's Final Jeopardy answer was right."""
     player: PlayerIndex
     result: Literal["correct", "wrong"]
-    wager: int
-
-    @field_validator("wager", mode="before")
-    @classmethod
-    def _whole_number(cls, wager):
-        try:
-            return int(wager)
-        except (TypeError, ValueError):
-            raise _fail("Skriv innsatsen som et helt tall.") from None
 
 
 class AdjustForm(_Form):

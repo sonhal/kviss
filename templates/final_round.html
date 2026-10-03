@@ -40,48 +40,51 @@
     <span class="countdown-number">{% if left %}{{ left }}{% else %}Tiden er ute!{% endif %}</span>
     <div class="countdown-bar"><span style="width: {{ (100 * left / final.seconds)|round(1) }}%"></span></div>
   </div>
-  <p class="finale-help">Skriv svaret på lappen og legg den med forsiden ned. Lagene snur lappen én etter én.</p>
-  <form method="post" action="{{ url_for('final_reveal') }}">
-    <button class="dd-go">Avslør svarene</button>
+  <p class="finale-help">Skriv svaret på lappen og legg den med forsiden ned.</p>
+  <form method="post" action="{{ url_for('final_bets') }}">
+    <button class="dd-go">Skriv inn innsatsene</button>
   </form>
 
-  {% else %}{# reveal #}
+  {% elif phase == "bets" %}
   <p class="finale-question">{{ quiz.final.question }}</p>
-  {% set next = game.final_next() %}
-  {# The answer stays hidden while teams are revealed, so nobody can change what they wrote after seeing it.
-     The host shows it when they want (app.js reveals it in place; the link is the no-JS fallback), and it
-     is always shown once every team is done. #}
-  {% set shown = next is none or request.args.get("reveal") == "1" %}
-  <p class="clue-answer"{% if not shown %} hidden{% endif %}>{{ quiz.final.answer }}</p>
-  {% if not shown %}
-  <a class="reveal" href="{{ url_for('board', reveal=1) }}">Vis svar</a>
-  {% endif %}
+  <form method="post" action="{{ url_for('final_answer') }}" class="finale-bets">
+    <p class="finale-help">Skriv inn innsatsen fra hver lapp. Svaret vises når alle er skrevet inn.</p>
+    <div class="finale-teams">
+      {% for p in final.order %}
+      <label class="finale-bet"><span class="player-name">{{ quiz.players[p] }}</span>
+        <input type="number" name="wager-{{ p }}" min="0" max="{{ game.state.scores[p] }}" step="1" required
+               inputmode="numeric" value="{{ form.get('wager-' ~ p, '') if form else '' }}">
+        <span class="muted">av {{ game.state.scores[p] }}</span></label>
+      {% endfor %}
+    </div>
+    {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+    <button class="dd-go">Vis svaret</button>
+  </form>
+
+  {% else %}{# answer #}
+  <p class="finale-question">{{ quiz.final.question }}</p>
+  <p class="clue-answer pop-in">{{ quiz.final.answer }}</p>
   <ol class="finale-reveal">
     {% for p in final.order %}
     {% set name = quiz.players[p] %}
+    {% set wager = game.final_wager(p) %}
     {% set result = game.final_result(p) %}
-    {% if result %}
-    <li class="{{ 'ok' if result.correct else 'bad' }}"><span class="player-name">{{ name }}</span>
-      {{ '✓' if result.correct else '✗' }} satset {{ result.wager }}</li>
-    {% elif p == next %}
+    {% if result is not none %}
+    <li class="{{ 'ok' if result else 'bad' }}"><span class="player-name">{{ name }}</span>
+      {{ '✓ +' if result else '✗ −' }}{{ wager }}</li>
+    {% else %}
     <li class="now">
       <form method="post" action="{{ url_for('final_judge') }}" class="finale-judge">
         <input type="hidden" name="player" value="{{ p }}">
-        <input type="hidden" name="reveal" value="{{ '1' if shown else '0' }}">
-        <span class="player-name">{{ name }}</span>
-        <label>Innsats <input type="number" name="wager" min="0" max="{{ game.state.scores[p] }}" step="1" required
-          inputmode="numeric" value="{{ form.get('wager', '') if form else '' }}"></label>
+        <span class="player-name">{{ name }}</span> <span>satset {{ wager }}</span>
         <button name="result" value="correct" class="ok" aria-label="{{ name }} riktig">✓</button>
         <button name="result" value="wrong" class="bad" aria-label="{{ name }} feil">✗</button>
       </form>
-      {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
     </li>
-    {% else %}
-    <li class="waiting"><span class="player-name">{{ name }}</span> venter</li>
     {% endif %}
     {% endfor %}
   </ol>
-  {% if next is none %}
+  {% if game.final_all_judged() %}
   <form method="post" action="{{ url_for('final_done') }}">
     <button class="dd-go">Se sluttresultat</button>
   </form>

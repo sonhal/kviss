@@ -31,13 +31,13 @@
     <h2>Finale</h2>
     <p><span class="gold">{{ g.quiz.final.category }}</span> · {{ g.quiz.final.question }}
       <span class="muted">– {{ g.quiz.final.answer }}</span></p>
-    {% if final.phase in ("reveal", "done") and final.order %}
+    {% if final.wagers %}
     <ul class="history">
       {% for p in final.order %}
       {% set result = g.final_result(p) %}
       <li>{{ g.quiz.players[p] }}:
-        {% if result %}{{ '✓ riktig' if result.correct else '✗ feil' }}, satset <strong>{{ result.wager }}</strong>
-        {% else %}<span class="muted">ikke avslørt</span>{% endif %}</li>
+        {% if result is not none %}{{ '✓ riktig' if result else '✗ feil' }}{% else %}<span class="muted">ikke vurdert</span>{% endif %},
+        satset <strong>{{ g.final_wager(p) }}</strong></li>
       {% endfor %}
     </ul>
     {% elif final.phase == "done" %}

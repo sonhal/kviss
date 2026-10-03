@@ -108,13 +108,15 @@ PRAGMA user_version = 2;
 
 def fresh_final(seconds):
     """Final Jeopardy, before it starts. It goes through these phases once the board is empty:
-    category (shown, teams write their bets) -> question (countdown) -> reveal (team by team, then all the
-    results until the host moves on) -> done (podium)."""
+    category (shown, teams write their bets on paper) -> question (countdown, teams write their answers)
+    -> bets (the host types in every bet) -> answer (shown; the host marks each team right or wrong)
+    -> done (podium)."""
     return {
         "seconds": seconds,   # the countdown
         "phase": "category",
-        "order": [],          # who plays, in reveal order (lowest score first); set when the question is shown
-        "results": {},        # str(player) -> {"wager": points, "correct": bool}
+        "order": [],          # who plays, lowest score first; set when the question is shown
+        "wagers": {},         # str(player) -> points, typed in after the countdown
+        "results": {},        # str(player) -> True (right) or False (wrong)
         "question_at": None,  # when the question was shown, so a reload doesn't restart the countdown
     }
 
@@ -359,23 +361,26 @@ class Game:
 
     def final_on(self):
         """Final Jeopardy is on the TV right now."""
-        return self.board_done() and self.final_phase() in ("category", "question", "reveal")
+        return self.board_done() and self.final_phase() in ("category", "question", "bets", "answer")
 
     def final_players(self):
-        """Who plays the final: everyone above 0 points. Once the question is out, the order is fixed."""
+        """Who plays the final: everyone above 0 points. Once the question is out, the list is fixed."""
         final = self.state["final"]
         if final["phase"] != "category":
             return final["order"]
         scores = self.state["scores"]
-        # Lowest score first, so the leader is revealed last.
+        # Lowest score first, so the leader is judged last.
         return sorted((p for p, s in enumerate(scores) if s > 0), key=lambda p: (scores[p], p))
 
+    def final_wager(self, player):
+        return self.state["final"]["wagers"].get(str(player))
+
     def final_result(self, player):
+        """True (right), False (wrong) or None (not judged yet)."""
         return self.state["final"]["results"].get(str(player))
 
-    def final_next(self):
-        """The player whose bet and answer are revealed next, or None."""
-        return next((p for p in self.state["final"]["order"] if self.final_result(p) is None), None)
+    def final_all_judged(self):
+        return all(self.final_result(p) is not None for p in self.state["final"]["order"])
 
     def final_seconds_left(self):
         final = self.state["final"]
@@ -384,48 +389,61 @@ class Game:
         elapsed = (datetime.now(timezone.utc) - datetime.fromisoformat(final["question_at"])).total_seconds()
         return max(0, math.ceil(final["seconds"] - elapsed))
 
+    def _final_step(self, phase, to):
+        """Move the final from one phase to the next. Called with the lock held; False if it isn't in `phase`."""
+        if not self.board_done() or self.final_phase() != phase:
+            return False
+        self._checkpoint()
+        self.state["final"]["phase"] = to
+        return True
+
     def show_final_question(self):
         """Category -> question. Nobody above 0 points: no final, straight to the podium."""
         with self.lock:
-            if not self.board_done() or self.final_phase() != "category":
-                return
-            self._checkpoint()
-            final = self.state["final"]
-            final["order"] = self.final_players()
-            final["phase"] = "question" if final["order"] else "done"
-            final["question_at"] = datetime.now(timezone.utc).isoformat()  # to the microsecond, for the countdown
-            self._save()
+            order = self.final_players() if self.state["final"] else []
+            if self._final_step("category", "question" if order else "done"):
+                self.state["final"]["order"] = order
+                self.state["final"]["question_at"] = datetime.now(timezone.utc).isoformat()  # to the microsecond
+                self._save()
 
-    def start_final_reveal(self):
+    def start_final_bets(self):
+        """Question -> bets: time is up, the host types in what each team bet."""
         with self.lock:
-            if self.final_phase() != "question":
-                return
-            self._checkpoint()
-            self.state["final"]["phase"] = "reveal"
-            self._save()
+            if self._final_step("question", "bets"):
+                self._save()
 
-    def judge_final(self, player, wager, correct):
-        """Reveal one team's bet and answer. Returns None, or a message for the host if the bet isn't allowed."""
+    def set_final_wagers(self, wagers):
+        """Bets -> answer. wagers: {player: points} for every team in the final. Returns None, or a message
+        for the host if a bet is missing or not allowed (nothing is saved then)."""
         with self.lock:
-            if self.final_phase() != "reveal" or player != self.final_next():
-                return None  # already revealed (a double tap): the page shows what happened
-            score = self.state["scores"][player]
-            if not 0 <= wager <= score:
-                return f"{self.quiz['players'][player]} kan ha satset fra 0 til {score}."
-            self._checkpoint()
-            self.state["scores"][player] += wager if correct else -wager
-            self.state["final"]["results"][str(player)] = {"wager": wager, "correct": correct}
+            if self.final_phase() != "bets":
+                return None  # already done (a double tap): the page shows what happened
+            for p in self.state["final"]["order"]:
+                score, wager = self.state["scores"][p], wagers.get(p)
+                if wager is None or not 0 <= wager <= score:
+                    return f"{self.quiz['players'][p]} kan ha satset fra 0 til {score}."
+            self._final_step("bets", "answer")
+            self.state["final"]["wagers"] = {str(p): wagers[p] for p in self.state["final"]["order"]}
             self._save()
             return None
 
-    def finish_final(self):
-        """Every team is revealed: on to the podium. Until then the TV shows all the results."""
+    def judge_final(self, player, correct):
+        """Mark one team's answer right (adds its bet) or wrong (subtracts it), in any order."""
         with self.lock:
-            if self.final_phase() != "reveal" or self.final_next() is not None:
-                return
+            if self.final_phase() != "answer" or player not in self.state["final"]["order"] \
+                    or self.final_result(player) is not None:
+                return  # not in the final, or already judged (a double tap)
             self._checkpoint()
-            self.state["final"]["phase"] = "done"
+            wager = self.final_wager(player)
+            self.state["scores"][player] += wager if correct else -wager
+            self.state["final"]["results"][str(player)] = correct
             self._save()
+
+    def finish_final(self):
+        """Every team is judged: on to the podium. Until then the TV shows all the results."""
+        with self.lock:
+            if self.final_all_judged() and self._final_step("answer", "done"):
+                self._save()
 
     # Daily Doubles
 
@@ -689,28 +707,35 @@ def create_app(db_path=None, password=None, media_dir=None, seed=None):
         current_game().show_final_question()
         return redirect(url_for("board"))
 
-    @app.post("/finale/avslor")
-    def final_reveal():
-        current_game().start_final_reveal()
+    @app.post("/finale/innsats")
+    def final_bets():
+        current_game().start_final_bets()
+        return redirect(url_for("board"))
+
+    @app.post("/finale/vis-svar")
+    def final_answer():
+        game = current_game()
+        wagers = {}
+        for p in range(len(game.quiz["players"])):
+            try:
+                wagers[p] = int(request.form[f"wager-{p}"])
+            except (KeyError, ValueError):
+                pass  # set_final_wagers names the first team without a (valid) bet
+        error = game.set_final_wagers(wagers)
+        if error:
+            return render_template("final_round.html", error=error, form=request.form), 400
+        return redirect(url_for("board"))
+
+    @app.post("/finale/svar")
+    def final_judge():
+        verdict = form(FinalJudgeForm)
+        current_game().judge_final(verdict.player, verdict.result == "correct")
         return redirect(url_for("board"))
 
     @app.post("/finale/ferdig")
     def final_done():
         current_game().finish_final()
         return redirect(url_for("board"))
-
-    @app.post("/finale/svar")
-    def final_judge():
-        game = current_game()
-        try:
-            verdict = parse_form(FinalJudgeForm, request.form.to_dict())
-            error = game.judge_final(verdict.player, verdict.wager, verdict.result == "correct")
-        except FormError as e:
-            error = str(e)
-        if error and game.final_on():
-            return render_template("final_round.html", error=error, form=request.form), 400
-        # Keep the answer showing if the host had already shown it.
-        return redirect(url_for("board", **({"reveal": "1"} if request.form.get("reveal") == "1" else {})))
 
     @app.get("/q/<int:c>/<int:r>")
     def question(c, r):

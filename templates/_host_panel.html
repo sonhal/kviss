@@ -35,12 +35,14 @@
   <p class="host-progress">
     {%- if final.phase == "category" %}Kategorien vises. Lagene skriver ned innsatsen.
     {%- elif final.phase == "question" %}Spørsmålet vises ({{ final.seconds }} sekunder).
-    {%- else %}Svarene avsløres.{% endif %}</p>
-  {% if final.results %}
+    {%- elif final.phase == "bets" %}Innsatsene skrives inn.
+    {%- else %}Svaret vises. Marker hvert lag riktig eller feil.{% endif %}</p>
+  {% if final.wagers %}
   <ul class="host-final">
-    {% for p in final.order if game.final_result(p) %}
+    {% for p in final.order %}
     {% set result = game.final_result(p) %}
-    <li>{{ quiz.players[p] }}: {{ '✓' if result.correct else '✗' }} satset {{ result.wager }}</li>
+    <li>{{ quiz.players[p] }}: satset {{ game.final_wager(p) }}
+      {%- if result is not none %} {{ '✓' if result else '✗' }}{% endif %}</li>
     {% endfor %}
   </ul>
   {% endif %}
