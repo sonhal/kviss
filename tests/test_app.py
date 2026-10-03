@@ -506,6 +506,7 @@ class KvissTest(unittest.TestCase):
         self.assertIn('type="file"', page)
         self.assertIn("Slik lager du en kviss-fil", page)
         self.assertIn('href="/static/kviss-mal.json"', page)
+        self.assertIn('id="finale"', page)
         for path in ("/", "/nytt", "/admin"):
             self.assertIn('href="/last-opp"', self.client.get(path).get_data(as_text=True), path)
 

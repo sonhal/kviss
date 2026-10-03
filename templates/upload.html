@@ -77,8 +77,7 @@
       <li>Hvert spørsmål trenger <code>value</code> (poeng, et helt tall uten anførselstegn: <code>100</code>, ikke
         <code>"100"</code>), <code>question</code> og <code>answer</code>.</li>
       <li><code>players</code> (valgfritt): lag eller deltakere som foreslås når du starter et spill.</li>
-      <li><code>final</code> (valgfritt): et finalespørsmål med <code>category</code>, <code>question</code> og
-        <code>answer</code>. Det spilles når brettet er tomt: alle med over 0 poeng satser på en lapp.</li>
+      <li><code>final</code> (valgfritt): et finalespørsmål, se <a class="gold" href="#finale">Finale</a> under.</li>
       <li>Tekst står i anførselstegn, og det skal være komma mellom elementer, men ikke etter det siste.</li>
       <li>Feltnavnene skrives nøyaktig som over: en skrivefeil som <code>"anwser"</code> blir avvist.</li>
     </ul>
@@ -90,6 +89,18 @@
   "youtube": "djV11Xbc914", "start": 50, "end": 65 }</code></pre>
     <p class="muted">Lydfiler (<code>"audio"</code>) må legges på serveren av den som drifter kviss før kvissen
       lastes opp. Test klippene under ⚙ Admin → Musikk før spillet.</p>
+
+    <h3 id="finale">Finale</h3>
+    <p>En kviss kan ha ett finalespørsmål (som Final Jeopardy) med egen kategori. Legg det til etter
+      <code>categories</code>:</p>
+<pre><code>"final": {
+  "category": "Polarhistorie",
+  "question": "Han nådde Sydpolen først.",
+  "answer": "Roald Amundsen"
+}</code></pre>
+    <p>Kryss av for <strong>Med finale</strong> på Nytt spill for å bruke det. Når brettet er tomt, vises kategorien.
+      Alle med over 0 poeng skriver innsats (0 til hele poengsummen) og svar på en lapp. Riktig svar gir innsatsen,
+      feil svar trekker den fra. Lag finalen litt vanskeligere enn resten.</p>
 
     <h3>La en KI lage spørsmålene</h3>
     <p>Lim inn dette i ChatGPT, Claude eller lignende, bytt ut emnene og lagre svaret som en <code>.json</code>-fil:</p>
