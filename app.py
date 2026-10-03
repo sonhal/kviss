@@ -206,9 +206,15 @@ class Store:
         with self._db() as db:
             return db.execute("SELECT * FROM games WHERE ended_at IS NULL").fetchone()
 
-    def games(self, limit=20):
+    def games(self, limit=20, ended=False):
+        """The newest games first. ended=True leaves out the current game."""
+        where = "WHERE ended_at IS NOT NULL" if ended else ""
         with self._db() as db:
-            return db.execute("SELECT * FROM games ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+            return db.execute(f"SELECT * FROM games {where} ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+
+    def game(self, game_id):
+        with self._db() as db:
+            return db.execute("SELECT * FROM games WHERE id = ?", (game_id,)).fetchone()
 
     def save_state(self, game_id, state):
         with self._db() as db:
@@ -434,13 +440,33 @@ def create_app(db_path=None, password=None, media_dir=None, seed=None):
             abort(400)
 
     def current_game():
-        """The game on the TV, or abort with a redirect to the new-game screen."""
+        """The game on the TV, or abort with a redirect to the landing page."""
         game = kviss.game
         if game is None:
-            abort(redirect(url_for("new_game")))
+            abort(redirect(url_for("home")))
         return game
 
+    # --- landing page and results ------------------------------------------
+
     @app.get("/")
+    def home():
+        past = [Game(row) for row in store.games(limit=50, ended=True)]
+        return render_template("home.html", past=past)
+
+    @app.get("/resultat/<int:game_id>")
+    def results(game_id):
+        game = kviss.game
+        if game is None or game.id != game_id:  # the current game is read live, the rest from the database
+            row = store.game(game_id)
+            if row is None:
+                abort(404)
+            game = Game(row)
+        rows = max(len(cat["questions"]) for cat in game.quiz["categories"])
+        return render_template("results.html", g=game, rows=rows)
+
+    # --- the game on the TV --------------------------------------------------
+
+    @app.get("/brett")
     def board():
         game = current_game()
         game.set_current(None)

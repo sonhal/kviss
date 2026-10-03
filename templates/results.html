@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Resultat · {{ g.quiz.title }}{% endblock %}
+{% block body_class %}page-admin{% endblock %}
+{% block content %}
+{# g is the game shown here; game (from the context processor) is the one on the TV, maybe the same. #}
+<header class="topbar">
+  <h1>{{ g.quiz.title }}</h1>
+  <nav>
+    {% if not g.ended_at %}<a class="tool" href="{{ url_for('board') }}">Fortsett</a>{% endif %}
+    <a class="tool" href="{{ url_for('home') }}">← Hjem</a>
+  </nav>
+</header>
+
+<main class="admin">
+  <section>
+    <p class="muted">Startet {{ g.started_at|when }}
+      {%- if g.ended_at %}, avsluttet {{ g.ended_at|when }}{% else %} · <span class="gold">pågår</span>{% endif %}
+      · {{ g.state.used|length }} av {{ g.total_questions() }} spørsmål spilt</p>
+    <h2>Resultat</h2>
+    <ol class="results-ranking">
+      {% for p in g.standings() %}
+      <li class="place-{{ p.place }}"><span class="rest-place">{{ p.place }}.</span> {{ p.name }}
+        <strong{% if p.score < 0 %} class="negative"{% endif %}>{{ p.score }}</strong></li>
+      {% endfor %}
+    </ol>
+  </section>
+
+  <section class="results-wide">
+    <h2>Spørsmål</h2>
+    <div class="results-scroll">
+      <table class="results-board">
+        <thead>
+          <tr>{% for cat in g.quiz.categories %}<th scope="col">{{ cat.name }}</th>{% endfor %}</tr>
+        </thead>
+        <tbody>
+          {% for r in range(rows) %}
+          <tr>
+            {% for cat in g.quiz.categories %}
+            {% set c = loop.index0 %}
+            {% if r < cat.questions|length %}
+            {% set w = g.winner(c, r) %}
+            {% set wrong = g.wrong_players(c, r) %}
+            <td class="{% if not g.is_used(c, r) %}unplayed{% elif w is none %}no-winner{% endif %}"
+                title="{{ cat.questions[r].question }} – {{ cat.questions[r].answer }}">
+              <span class="gold">{{ cat.questions[r].value }}</span>
+              {% if not g.is_used(c, r) %}<span class="muted">–</span>
+              {% elif w is not none %}<span>✓ {{ g.quiz.players[w] }}</span>
+              {% else %}<span class="muted">Ingen</span>{% endif %}
+              {% if wrong %}<span class="results-wrong">✗ {% for p in wrong %}{{ g.quiz.players[p] }}{% if not loop.last %}, {% endif %}{% endfor %}</span>{% endif %}
+            </td>
+            {% else %}
+            <td class="empty"></td>
+            {% endif %}
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="muted">✓ svarte riktig · ✗ svarte feil · – ikke spilt.</p>
+  </section>
+</main>
+{% endblock %}

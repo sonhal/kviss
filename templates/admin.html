@@ -4,7 +4,10 @@
 {% block content %}
 <header class="topbar">
   <h1>Admin</h1>
-  <nav>{% if game %}<a class="tool" href="{{ url_for('board') }}">← Brett</a>{% endif %}</nav>
+  <nav>
+    {% if game %}<a class="tool" href="{{ url_for('board') }}">← Brett</a>{% endif %}
+    <a class="tool" href="{{ url_for('home') }}">⌂ Hjem</a>
+  </nav>
 </header>
 
 <main class="admin">
@@ -74,7 +77,8 @@
     <ul class="history">
       {% for g in past %}
       <li>
-        <span class="muted">{{ g.started_at|when }}</span> <strong>{{ g.quiz.title }}</strong>
+        <span class="muted">{{ g.started_at|when }}</span>
+        <a href="{{ url_for('results', game_id=g.id) }}"><strong>{{ g.quiz.title }}</strong></a>
         {% if not g.ended_at %}<span class="gold">(pågår)</span>{% endif %}
         <span class="muted">{{ g.state.used|length }} av {{ g.total_questions() }} spilt</span><br>
         {% for p in g.standings() %}{{ p.place }}. {{ p.name }} <strong>{{ p.score }}</strong>{% if not loop.last %} · {% endif %}{% endfor %}
