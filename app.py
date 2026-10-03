@@ -13,6 +13,7 @@ browser or a restarted server picks up where the game left off.
 
 import copy
 import json
+import math
 import mimetypes
 import os
 import secrets
@@ -29,8 +30,8 @@ from flask import (Flask, Response, abort, jsonify, redirect, render_template, r
                    url_for)
 from werkzeug.exceptions import RequestEntityTooLarge
 
-from schemas import (MIN_WAGER, AdjustForm, ConfigError, ConfirmForm, FormError, JudgeForm, NewGameForm, UndoForm,
-                     WagerForm, parse_form, parse_quiz)
+from schemas import (FINAL_SECONDS, MIN_WAGER, AdjustForm, ConfigError, ConfirmForm, FinalJudgeForm, FormError,
+                     JudgeForm, NewGameForm, UndoForm, WagerForm, parse_form, parse_quiz)
 
 BASE_DIR = Path(__file__).resolve().parent
 mimetypes.add_type("application/manifest+json", ".webmanifest")
@@ -94,7 +95,7 @@ CREATE TABLE IF NOT EXISTS games (
     quiz       TEXT NOT NULL,           -- frozen copy of the quiz as it was when the game started
     name       TEXT,                    -- set by the host when starting; NULL = named after the quiz
     players    TEXT NOT NULL,           -- JSON list of names
-    state      TEXT NOT NULL,           -- JSON: scores, used, wrong, Daily Doubles, undo history
+    state      TEXT NOT NULL,           -- JSON: scores, used, wrong, Daily Doubles, final, undo history
     started_at TEXT NOT NULL,
     ended_at   TEXT                     -- NULL for the game on the TV right now
 );
@@ -105,13 +106,29 @@ PRAGMA user_version = 2;
 """
 
 
-def fresh_state(n_players, daily_doubles=()):
+def fresh_final(seconds):
+    """Final Jeopardy, before it starts. It goes through these phases once the board is empty:
+    category (shown, teams write their bets on paper) -> question (countdown, teams write their answers)
+    -> bets (the host types in every bet) -> answer (shown; the host marks each team right or wrong)
+    -> done (podium)."""
+    return {
+        "seconds": seconds,   # the countdown
+        "phase": "category",
+        "order": [],          # who plays, lowest score first; set when the question is shown
+        "wagers": {},         # str(player) -> points, typed in after the countdown
+        "results": {},        # str(player) -> True (right) or False (wrong)
+        "question_at": None,  # when the question was shown, so a reload doesn't restart the countdown
+    }
+
+
+def fresh_state(n_players, daily_doubles=(), final_seconds=0):
     return {
         "scores": [0] * n_players,
         "used": {},     # "c-r" -> index of player who answered correctly, or None
         "wrong": {},    # "c-r" -> [indexes of players who answered wrong]
         "daily_doubles": list(daily_doubles),  # ["c-r", ...], hidden until the tile is opened
         "wagers": {},   # "c-r" -> {"player": index, "amount": points} for Daily Doubles
+        "final": fresh_final(final_seconds) if final_seconds else None,  # None = no Final Jeopardy
         "history": [],  # snapshots for undo
     }
 
@@ -210,10 +227,11 @@ class Store:
 
     # --- games -------------------------------------------------------------
 
-    def start_game(self, slug, players, name=None, daily_doubles=0):
+    def start_game(self, slug, players, name=None, daily_doubles=0, final_seconds=0):
         """End the current game and start a new one, with `daily_doubles` Daily Doubles hidden
-        on the board. Returns the new game's row, or None if there is no such quiz. A current
-        game where nothing was scored is dropped instead of being kept in the history."""
+        on the board, and Final Jeopardy with a countdown of `final_seconds` (0 = none) if the
+        quiz has a final question. Returns the new game's row, or None if there is no such quiz.
+        A current game where nothing was scored is dropped instead of being kept in the history."""
         with self._db() as db:
             quiz = db.execute("SELECT id, data FROM quizzes WHERE slug = ?", (slug,)).fetchone()
             if quiz is None:
@@ -223,7 +241,9 @@ class Store:
                 db.execute("DELETE FROM games WHERE id = ?", (current["id"],))
             elif current:
                 db.execute("UPDATE games SET ended_at = ? WHERE id = ?", (now(), current["id"]))
-            state = fresh_state(len(players), pick_daily_doubles(json.loads(quiz["data"]), daily_doubles))
+            data = json.loads(quiz["data"])
+            state = fresh_state(len(players), pick_daily_doubles(data, daily_doubles),
+                                final_seconds if data.get("final") else 0)
             game_id = db.execute(
                 "INSERT INTO games (quiz_id, quiz, name, players, state, started_at) VALUES (?, ?, ?, ?, ?, ?)",
                 (quiz["id"], quiz["data"], name or None, json.dumps(players, ensure_ascii=False),
@@ -248,6 +268,16 @@ class Store:
         with self._db() as db:
             db.execute("UPDATE games SET state = ? WHERE id = ?", (json.dumps(state), game_id))
 
+    def last_final_seconds(self):
+        """The countdown of the latest game with Final Jeopardy, or None."""
+        with self._db() as db:
+            rows = db.execute("SELECT state FROM games ORDER BY id DESC LIMIT 20").fetchall()
+        for row in rows:
+            final = json.loads(row["state"]).get("final")
+            if final:
+                return final["seconds"]
+        return None
+
     def last_players(self):
         with self._db() as db:
             row = db.execute("SELECT players FROM games ORDER BY id DESC LIMIT 1").fetchone()
@@ -267,7 +297,8 @@ class Game:
         # Templates read the players from quiz.players, as when they lived in the quiz file.
         self.quiz = {**json.loads(row["quiz"]), "players": json.loads(row["players"])}
         self.name = row["name"] or self.quiz["title"]  # games from before names existed: the quiz title
-        self.state = {"daily_doubles": [], "wagers": {}, **json.loads(row["state"])}  # older games have neither
+        self.state = {"daily_doubles": [], "wagers": {}, "final": None,  # older games have none of these
+                      **json.loads(row["state"])}
         self.started_at, self.ended_at = row["started_at"], row["ended_at"]
         self.audio_files = {q["audio"] for cat in self.quiz["categories"]  # the only files /media/ serves
                             for q in cat["questions"] if q.get("audio")}
@@ -284,7 +315,7 @@ class Game:
         self.version += 1
 
     def _checkpoint(self):
-        snap = {k: copy.deepcopy(self.state[k]) for k in ("scores", "used", "wrong", "wagers")}
+        snap = {k: copy.deepcopy(self.state[k]) for k in ("scores", "used", "wrong", "wagers", "final")}
         self.state["history"] = (self.state["history"] + [snap])[-UNDO_LIMIT:]
 
     # --- queries -----------------------------------------------------------
@@ -307,8 +338,12 @@ class Game:
     def total_questions(self):
         return sum(len(cat["questions"]) for cat in self.quiz["categories"])
 
-    def is_over(self):
+    def board_done(self):
         return len(self.state["used"]) >= self.total_questions()
+
+    def is_over(self):
+        """The board is empty, and Final Jeopardy (if the game has one) has been played."""
+        return self.board_done() and self.final_phase() in (None, "done")
 
     def in_progress(self):
         """Something was scored and the board isn't finished: starting another game would cut it short."""
@@ -316,6 +351,99 @@ class Game:
 
     def can_undo(self):
         return bool(self.state["history"])
+
+    # Final Jeopardy
+
+    def final_phase(self):
+        """None if the game has no final, else its phase (see fresh_final)."""
+        final = self.state["final"]
+        return final["phase"] if final else None
+
+    def final_on(self):
+        """Final Jeopardy is on the TV right now."""
+        return self.board_done() and self.final_phase() in ("category", "question", "bets", "answer")
+
+    def final_players(self):
+        """Who plays the final: everyone above 0 points. Once the question is out, the list is fixed."""
+        final = self.state["final"]
+        if final["phase"] != "category":
+            return final["order"]
+        scores = self.state["scores"]
+        # Lowest score first, so the leader is judged last.
+        return sorted((p for p, s in enumerate(scores) if s > 0), key=lambda p: (scores[p], p))
+
+    def final_wager(self, player):
+        return self.state["final"]["wagers"].get(str(player))
+
+    def final_result(self, player):
+        """True (right), False (wrong) or None (not judged yet)."""
+        return self.state["final"]["results"].get(str(player))
+
+    def final_all_judged(self):
+        return all(self.final_result(p) is not None for p in self.state["final"]["order"])
+
+    def final_seconds_left(self):
+        final = self.state["final"]
+        if not final["question_at"]:
+            return final["seconds"]
+        elapsed = (datetime.now(timezone.utc) - datetime.fromisoformat(final["question_at"])).total_seconds()
+        return max(0, math.ceil(final["seconds"] - elapsed))
+
+    def _final_step(self, phase, to):
+        """Move the final from one phase to the next. Called with the lock held; False if it isn't in `phase`."""
+        if not self.board_done() or self.final_phase() != phase:
+            return False
+        self._checkpoint()
+        self.state["final"]["phase"] = to
+        return True
+
+    def show_final_question(self):
+        """Category -> question. Nobody above 0 points: no final, straight to the podium."""
+        with self.lock:
+            order = self.final_players() if self.state["final"] else []
+            if self._final_step("category", "question" if order else "done"):
+                self.state["final"]["order"] = order
+                self.state["final"]["question_at"] = datetime.now(timezone.utc).isoformat()  # to the microsecond
+                self._save()
+
+    def start_final_bets(self):
+        """Question -> bets: time is up, the host types in what each team bet."""
+        with self.lock:
+            if self._final_step("question", "bets"):
+                self._save()
+
+    def set_final_wagers(self, wagers):
+        """Bets -> answer. wagers: {player: points} for every team in the final. Returns None, or a message
+        for the host if a bet is missing or not allowed (nothing is saved then)."""
+        with self.lock:
+            if self.final_phase() != "bets":
+                return None  # already done (a double tap): the page shows what happened
+            for p in self.state["final"]["order"]:
+                score, wager = self.state["scores"][p], wagers.get(p)
+                if wager is None or not 0 <= wager <= score:
+                    return f"{self.quiz['players'][p]} kan ha satset fra 0 til {score}."
+            self._final_step("bets", "answer")
+            self.state["final"]["wagers"] = {str(p): wagers[p] for p in self.state["final"]["order"]}
+            self._save()
+            return None
+
+    def judge_final(self, player, correct):
+        """Mark one team's answer right (adds its bet) or wrong (subtracts it), in any order."""
+        with self.lock:
+            if self.final_phase() != "answer" or player not in self.state["final"]["order"] \
+                    or self.final_result(player) is not None:
+                return  # not in the final, or already judged (a double tap)
+            self._checkpoint()
+            wager = self.final_wager(player)
+            self.state["scores"][player] += wager if correct else -wager
+            self.state["final"]["results"][str(player)] = correct
+            self._save()
+
+    def finish_final(self):
+        """Every team is judged: on to the podium. Until then the TV shows all the results."""
+        with self.lock:
+            if self.final_all_judged() and self._final_step("answer", "done"):
+                self._save()
 
     # Daily Doubles
 
@@ -441,7 +569,8 @@ class Game:
         """Start the board over. The Daily Doubles move, since the room has seen where some of them were."""
         with self.lock:
             hidden = pick_daily_doubles(self.quiz, len(self.state["daily_doubles"]))
-            self.state = fresh_state(len(self.quiz["players"]), hidden)
+            final = self.state["final"]
+            self.state = fresh_state(len(self.quiz["players"]), hidden, final["seconds"] if final else 0)
             self._save()
 
 
@@ -455,9 +584,9 @@ class Kviss:
         row = store.current_game()
         self.game = Game(row, store) if row else None
 
-    def start(self, slug, players, name=None, daily_doubles=0):
+    def start(self, slug, players, name=None, daily_doubles=0, final_seconds=0):
         with self.lock:
-            row = self.store.start_game(slug, players, name, daily_doubles)
+            row = self.store.start_game(slug, players, name, daily_doubles, final_seconds)
             if row is None:
                 return None
             # Continue the version count so the host view always notices the switch.
@@ -565,9 +694,48 @@ def create_app(db_path=None, password=None, media_dir=None, seed=None):
         game.set_current(None)
         if game.is_over():
             return render_template("final.html", ranking=game.standings())
+        if game.final_on():
+            return render_template("final_round.html")
         cats = game.quiz["categories"]
         rows = max(len(cat["questions"]) for cat in cats)
         return render_template("board.html", rows=rows)
+
+    # Final Jeopardy: /brett shows it once the board is empty. The host moves it on step by step.
+
+    @app.post("/finale/sporsmal")
+    def final_question():
+        current_game().show_final_question()
+        return redirect(url_for("board"))
+
+    @app.post("/finale/innsats")
+    def final_bets():
+        current_game().start_final_bets()
+        return redirect(url_for("board"))
+
+    @app.post("/finale/vis-svar")
+    def final_answer():
+        game = current_game()
+        wagers = {}
+        for p in range(len(game.quiz["players"])):
+            try:
+                wagers[p] = int(request.form[f"wager-{p}"])
+            except (KeyError, ValueError):
+                pass  # set_final_wagers names the first team without a (valid) bet
+        error = game.set_final_wagers(wagers)
+        if error:
+            return render_template("final_round.html", error=error, form=request.form), 400
+        return redirect(url_for("board"))
+
+    @app.post("/finale/svar")
+    def final_judge():
+        verdict = form(FinalJudgeForm)
+        current_game().judge_final(verdict.player, verdict.result == "correct")
+        return redirect(url_for("board"))
+
+    @app.post("/finale/ferdig")
+    def final_done():
+        current_game().finish_final()
+        return redirect(url_for("board"))
 
     @app.get("/q/<int:c>/<int:r>")
     def question(c, r):
@@ -673,7 +841,8 @@ def create_app(db_path=None, password=None, media_dir=None, seed=None):
         if request.method == "GET":
             players = chosen["players"] or store.last_players()
             name = f"{chosen['title']} · {datetime.now(tz):%d.%m.%Y}"  # a suggestion the host can change
-            return render_template("new_game_players.html", chosen=chosen, name=name, players="\n".join(players))
+            return render_template("new_game_players.html", chosen=chosen, name=name, players="\n".join(players),
+                                   with_final=False, final_seconds=store.last_final_seconds() or FINAL_SECONDS)
         try:
             entry = parse_form(NewGameForm, request.form.to_dict())
             if entry.daily_doubles > chosen["questions"]:
@@ -685,9 +854,11 @@ def create_app(db_path=None, password=None, media_dir=None, seed=None):
             return render_template("new_game_players.html", chosen=chosen, name=request.form.get("name", "").strip(),
                                    players=request.form.get("players", "").strip(), error=str(e),
                                    daily_double=request.form.get("daily_double") == "yes",
-                                   daily_doubles=request.form.get("daily_doubles", "1")), 400
-        if kviss.start(slug, entry.players, entry.name, entry.daily_doubles) is None:  # deleted in the meantime
-            abort(404)
+                                   daily_doubles=request.form.get("daily_doubles", "1"),
+                                   with_final=request.form.get("final") == "yes",
+                                   final_seconds=request.form.get("final_seconds", FINAL_SECONDS)), 400
+        if kviss.start(slug, entry.players, entry.name, entry.daily_doubles, entry.final_seconds) is None:
+            abort(404)  # deleted in the meantime
         return redirect(url_for("board"))
 
     # --- uploading quizzes from the browser ------------------------------------
@@ -790,7 +961,7 @@ def create_app(db_path=None, password=None, media_dir=None, seed=None):
         q = store.quiz(slug)
         if q is None:
             return api_error(f"no quiz {slug!r}", 404)
-        return jsonify({k: q[k] for k in ("slug", "title", "players", "categories")})
+        return jsonify({k: q[k] for k in ("slug", "title", "players", "categories", "final") if k in q})
 
     @app.delete("/api/quizzes/<slug>")
     def api_delete_quiz(slug):

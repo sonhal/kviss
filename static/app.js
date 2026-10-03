@@ -208,6 +208,31 @@
     limit();
   }
 
+  // --- Final Jeopardy countdown ---------------------------------------------
+  // The server says how many seconds are left, so a reload carries on where it was.
+  const countdown = document.querySelector(".countdown");
+  if (countdown) {
+    const total = Number(countdown.dataset.seconds);
+    const endsAt = Date.now() + Number(countdown.dataset.left) * 1000;
+    const number = countdown.querySelector(".countdown-number");
+    const bar = countdown.querySelector(".countdown-bar span");
+    const tick = () => {
+      const left = Math.max(0, (endsAt - Date.now()) / 1000);
+      bar.style.width = `${(100 * left) / total}%`;
+      countdown.classList.toggle("ending", left > 0 && left <= 5);
+      if (left > 0) {
+        number.textContent = Math.ceil(left);
+        return;
+      }
+      clearInterval(timer);
+      countdown.classList.add("over");
+      number.textContent = "Tiden er ute!";
+      if (navigator.vibrate) navigator.vibrate([80, 60, 80]);
+    };
+    const timer = setInterval(tick, 200);
+    tick();
+  }
+
   // --- Judge buttons: no double submits, a little haptic feedback -----------
   document.addEventListener("submit", (e) => {
     const form = e.target;

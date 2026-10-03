@@ -8,7 +8,7 @@
 </header>
 
 <main class="rules">
-  <ol class="rule-cards{% if game.state.daily_doubles %} wide{% endif %}">
+  <ol class="rule-cards{% if game.state.daily_doubles or game.state.final %} wide{% endif %}">
     <li class="rule">
       <span class="rule-icon" aria-hidden="true">🎯</span>
       <h2>Velg</h2>
@@ -42,10 +42,18 @@
       <h2>Ingen</h2>
       <p>Svarer ingen riktig, vises svaret og ingen får poeng.</p>
     </li>
+    {% if game.state.final %}
+    <li class="rule rule-final">
+      <span class="rule-icon" aria-hidden="true">✍️</span>
+      <h2>Finale</h2>
+      <p>Til slutt ett spørsmål for alle med over 0 poeng. Skriv innsats og svar på en lapp. Riktig gir innsatsen,
+        feil trekker den fra.</p>
+    </li>
+    {% endif %}
     <li class="rule rule-win">
       <span class="rule-icon" aria-hidden="true">🏆</span>
       <h2>Vinner</h2>
-      <p>Når brettet er tomt, vinner den med flest poeng.</p>
+      <p>{% if game.state.final %}Etter finalen{% else %}Når brettet er tomt{% endif %}, vinner den med flest poeng.</p>
     </li>
   </ol>
 

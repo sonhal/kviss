@@ -25,6 +25,27 @@
   {% elif current.wrong %}
   <p class="host-status bad">✗ Feil: {{ current.wrong|join(", ") }}</p>
   {% endif %}
+  {% elif game.final_on() %}
+  {% set final = game.state.final %}
+  <p class="host-game">{{ game.name }}</p>
+  <p class="host-meta">Finale · <span class="gold">{{ quiz.final.category }}</span></p>
+  <p class="host-question">{{ quiz.final.question }}</p>
+  <p class="host-label">Svar</p>
+  <p class="host-answer">{{ quiz.final.answer }}</p>
+  <p class="host-progress">
+    {%- if final.phase == "category" %}Kategorien vises. Lagene skriver ned innsatsen.
+    {%- elif final.phase == "question" %}Spørsmålet vises ({{ final.seconds }} sekunder).
+    {%- elif final.phase == "bets" %}Innsatsene skrives inn.
+    {%- else %}Svaret vises. Marker hvert lag riktig eller feil.{% endif %}</p>
+  {% if final.wagers %}
+  <ul class="host-final">
+    {% for p in final.order %}
+    {% set result = game.final_result(p) %}
+    <li>{{ quiz.players[p] }}: satset {{ game.final_wager(p) }}
+      {%- if result is not none %} {{ '✓' if result else '✗' }}{% endif %}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
   {% elif game.is_over() %}
   <p class="host-game">{{ game.name }}</p>
   <p class="host-idle">Spillet er ferdig</p>

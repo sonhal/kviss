@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Finale · {{ game_name }}{% endblock %}
+{% block body_class %}page-final-round{% endblock %}
+{% block content %}
+{# Final Jeopardy, shown on /brett once the board is empty. One page for each phase (see fresh_final in app.py). #}
+{% set final = game.state.final %}
+{% set phase = final.phase %}
+{% include "_topbar.html" %}
+
+<main class="clue finale">
+  <p class="finale-label">Finale</p>
+  <p class="finale-category">{{ quiz.final.category }}</p>
+
+  {% if phase == "category" %}
+  {% set playing = game.final_players() %}
+  {% if playing %}
+  <p class="finale-help">Skriv ned innsatsen på en lapp: fra 0 til hele poengsummen. Riktig svar gir innsatsen,
+    feil svar trekker den fra.</p>
+  <ul class="finale-teams">
+    {% for name in quiz.players %}
+    {% set p = loop.index0 %}
+    <li{% if p not in playing %} class="out"{% endif %}><span class="player-name">{{ name }}</span>
+      {% if p in playing %}maks {{ game.state.scores[p] }}{% else %}ute{% endif %}</li>
+    {% endfor %}
+  </ul>
+  <form method="post" action="{{ url_for('final_question') }}">
+    <button class="dd-go">Vis spørsmålet</button>
+  </form>
+  {% else %}
+  <p class="finale-help">Ingen har over 0 poeng, så finalen spilles ikke.</p>
+  <form method="post" action="{{ url_for('final_question') }}">
+    <button class="dd-go">Til resultatet</button>
+  </form>
+  {% endif %}
+
+  {% elif phase == "question" %}
+  <p class="clue-text">{{ quiz.final.question }}</p>
+  {% set left = game.final_seconds_left() %}
+  <div class="countdown{% if not left %} over{% endif %}" data-seconds="{{ final.seconds }}" data-left="{{ left }}">
+    <span class="countdown-number">{% if left %}{{ left }}{% else %}Tiden er ute!{% endif %}</span>
+    <div class="countdown-bar"><span style="width: {{ (100 * left / final.seconds)|round(1) }}%"></span></div>
+  </div>
+  <p class="finale-help">Skriv svaret på lappen og legg den med forsiden ned.</p>
+  <form method="post" action="{{ url_for('final_bets') }}">
+    <button class="dd-go">Skriv inn innsatsene</button>
+  </form>
+
+  {% elif phase == "bets" %}
+  <p class="finale-question">{{ quiz.final.question }}</p>
+  <form method="post" action="{{ url_for('final_answer') }}" class="finale-bets">
+    <p class="finale-help">Skriv inn innsatsen fra hver lapp. Svaret vises når alle er skrevet inn.</p>
+    <div class="finale-teams">
+      {% for p in final.order %}
+      <label class="finale-bet"><span class="player-name">{{ quiz.players[p] }}</span>
+        <input type="number" name="wager-{{ p }}" min="0" max="{{ game.state.scores[p] }}" step="1" required
+               inputmode="numeric" value="{{ form.get('wager-' ~ p, '') if form else '' }}">
+        <span class="muted">av {{ game.state.scores[p] }}</span></label>
+      {% endfor %}
+    </div>
+    {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+    <button class="dd-go">Vis svaret</button>
+  </form>
+
+  {% else %}{# answer #}
+  <p class="finale-question">{{ quiz.final.question }}</p>
+  <p class="clue-answer pop-in">{{ quiz.final.answer }}</p>
+  <ol class="finale-reveal">
+    {% for p in final.order %}
+    {% set name = quiz.players[p] %}
+    {% set wager = game.final_wager(p) %}
+    {% set result = game.final_result(p) %}
+    {% if result is not none %}
+    <li class="{{ 'ok' if result else 'bad' }}"><span class="player-name">{{ name }}</span>
+      {{ '✓ +' if result else '✗ −' }}{{ wager }}</li>
+    {% else %}
+    <li class="now">
+      <form method="post" action="{{ url_for('final_judge') }}" class="finale-judge">
+        <input type="hidden" name="player" value="{{ p }}">
+        <span class="player-name">{{ name }}</span> <span>satset {{ wager }}</span>
+        <button name="result" value="correct" class="ok" aria-label="{{ name }} riktig">✓</button>
+        <button name="result" value="wrong" class="bad" aria-label="{{ name }} feil">✗</button>
+      </form>
+    </li>
+    {% endif %}
+    {% endfor %}
+  </ol>
+  {% if game.final_all_judged() %}
+  <form method="post" action="{{ url_for('final_done') }}">
+    <button class="dd-go">Se sluttresultat</button>
+  </form>
+  {% endif %}
+  {% endif %}
+</main>
+
+{% include "_scores.html" %}
+{% endblock %}

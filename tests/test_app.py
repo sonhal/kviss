@@ -506,6 +506,7 @@ class KvissTest(unittest.TestCase):
         self.assertIn('type="file"', page)
         self.assertIn("Slik lager du en kviss-fil", page)
         self.assertIn('href="/static/kviss-mal.json"', page)
+        self.assertIn('id="finale"', page)
         for path in ("/", "/nytt", "/admin"):
             self.assertIn('href="/last-opp"', self.client.get(path).get_data(as_text=True), path)
 
@@ -735,6 +736,158 @@ class KvissTest(unittest.TestCase):
         self.assertEqual(self.client.get(results).get_data(as_text=True).count('class="results-dd"'), 0)
         self.start("test", ["C", "D"], confirm="yes")  # ends it with both still hidden
         self.assertEqual(self.client.get(results).get_data(as_text=True).count('class="results-dd"'), 2)
+
+    # --- Final Jeopardy --------------------------------------------------------
+
+    FINAL = {"category": "Norsk historie", "question": "Dette året ble Norge selvstendig.", "answer": "1905"}
+
+    def start_with_final(self, players=("A", "B", "C"), seconds="30"):
+        self.upload({**QUIZ, "slug": "finale", "final": self.FINAL})
+        resp = self.start("finale", list(players), final="yes", final_seconds=seconds, confirm="yes")
+        self.assertEqual(resp.status_code, 302)
+
+    def test_final_question_in_quiz(self):
+        resp = self.upload({**QUIZ, "slug": "bad", "final": {"category": "X", "question": "Q"}})
+        self.assertIn("'final', 'answer' is required", resp.get_json()["problems"])
+        self.upload({**QUIZ, "slug": "finale", "final": self.FINAL})
+        self.assertEqual(self.client.get("/api/quizzes/finale").get_json()["final"], self.FINAL)
+        self.assertNotIn("final", self.client.get("/api/quizzes/test").get_json())
+
+    def test_new_game_offers_the_final_only_when_the_quiz_has_one(self):
+        page = self.client.get("/nytt/test").get_data(as_text=True)
+        self.assertIn('name="final" value="yes" disabled>', page)  # greyed out, with the reason
+        self.assertIn("har ikke et finalespørsmål", page)
+        self.assertNotIn("· finale", self.client.get("/nytt").get_data(as_text=True))
+        self.upload({**QUIZ, "slug": "finale", "final": self.FINAL})
+        self.assertIn("· finale", self.client.get("/nytt").get_data(as_text=True))
+        page = self.client.get("/nytt/finale").get_data(as_text=True)
+        self.assertIn('name="final" value="yes">', page)  # offered, but the host opts in
+        self.assertIn("«Norsk historie»", page)
+        self.assertIn('name="final_seconds" min="5" max="600" step="1"\n          value="30"', page)
+        self.start("finale", ["A", "B"], final_seconds="60")  # not ticked
+        self.assertIsNone(self.game.state["final"])
+        self.start("test", ["A", "B"], final="yes", final_seconds="60")  # no final in that quiz
+        self.assertIsNone(self.game.state["final"])
+        for seconds in ("4", "601", "x"):
+            resp = self.start("finale", ["A", "B"], final="yes", final_seconds=seconds)
+            self.assertEqual(resp.status_code, 400)
+            self.assertIn('name="final" value="yes" checked>', resp.get_data(as_text=True))  # kept ticked
+        self.start_with_final(seconds="60")
+        self.assertEqual(self.game.state["final"]["seconds"], 60)
+        # The next game suggests the same time.
+        self.assertIn('value="60"', self.client.get("/nytt/finale").get_data(as_text=True))
+
+    def play_board(self):
+        """A 200, B 100, C -100."""
+        self.judge(0, 1, "correct", 0)
+        self.judge(0, 0, "correct", 1)
+        self.judge(1, 0, "wrong", 2)
+        self.judge(1, 0, "nobody")
+
+    def test_final_round(self):
+        self.start_with_final()
+        self.play_board()
+        self.assertTrue(self.game.board_done())
+        self.assertFalse(self.game.is_over())
+        self.assertTrue(self.game.in_progress())
+        # 1. The category, and who plays: C is out at -100.
+        page = self.client.get("/brett").get_data(as_text=True)
+        self.assertIn("Norsk historie", page)
+        self.assertNotIn("selvstendig", page)
+        self.assertIn('<li class="out"><span class="player-name">C</span>', page)
+        self.assertIn("Fortsett", self.client.get("/").get_data(as_text=True))
+        self.assertIn("1905", self.client.get("/vert").get_data(as_text=True))  # the host sees the answer
+        # 2. The question and the countdown.
+        self.client.post("/finale/sporsmal")
+        self.assertEqual(self.game.state["final"]["order"], [1, 0])  # lowest score first
+        page = self.client.get("/brett").get_data(as_text=True)
+        self.assertIn("selvstendig", page)
+        self.assertIn('data-seconds="30" data-left="30"', page)
+        self.assertNotIn("1905", page)
+        # 3. Every bet is typed in before the answer is shown.
+        self.client.post("/finale/innsats")
+        page = self.client.get("/brett").get_data(as_text=True)
+        self.assertIn('name="wager-1"', page)
+        self.assertIn('name="wager-0"', page)
+        self.assertNotIn('name="wager-2"', page)  # C is out
+        self.assertNotIn("1905", page)
+        for bets, message in [({"wager-1": "100"}, "A kan ha satset fra 0 til 200"),
+                              ({"wager-1": "101", "wager-0": "200"}, "B kan ha satset fra 0 til 100"),
+                              ({"wager-1": "x", "wager-0": "200"}, "B kan ha satset")]:
+            resp = self.client.post("/finale/vis-svar", data=bets)
+            self.assertEqual(resp.status_code, 400, bets)
+            self.assertIn(message, resp.get_data(as_text=True))
+        self.assertEqual(self.game.final_phase(), "bets")
+        self.client.post("/finale/vis-svar", data={"wager-1": "100", "wager-0": "200"})
+        # 4. The answer, then each team right or wrong, in any order.
+        page = self.client.get("/brett").get_data(as_text=True)
+        self.assertIn("1905", page)
+        self.assertNotIn("Se sluttresultat", page)
+        self.client.post("/finale/svar", data={"player": "0", "result": "wrong"})
+        self.client.post("/finale/svar", data={"player": "0", "result": "correct"})  # a double tap does nothing
+        self.client.post("/finale/svar", data={"player": "2", "result": "correct"})  # C isn't in the final
+        self.assertEqual(self.game.state["scores"], [0, 100, -100])
+        self.client.post("/finale/ferdig")  # B isn't judged yet
+        self.assertFalse(self.game.is_over())
+        self.client.post("/finale/svar", data={"player": "1", "result": "correct"})
+        self.assertEqual(self.game.state["scores"], [0, 200, -100])
+        # 5. Every result stays on the TV until the host moves on to the podium, with B the winner.
+        page = self.client.get("/brett").get_data(as_text=True)
+        self.assertIn('<li class="bad"><span class="player-name">A</span>', page)
+        self.assertIn("Se sluttresultat", page)
+        self.client.post("/finale/ferdig")
+        self.assertTrue(self.game.is_over())
+        self.assertIn("Sluttresultat", self.client.get("/brett").get_data(as_text=True))
+        self.assertEqual(self.game.standings()[0]["name"], "B")
+        results = self.client.get(f"/resultat/{self.game.id}").get_data(as_text=True)
+        self.assertIn("✓ riktig,\n        satset <strong>100</strong>", results)
+        self.assertIn("✗ feil,\n        satset <strong>200</strong>", results)
+        # Undo goes back step by step.
+        self.client.post("/undo", data={"next": "board"})
+        self.assertFalse(self.game.is_over())
+        self.client.post("/undo", data={"next": "board"})
+        self.assertIsNone(self.game.final_result(1))
+        self.assertEqual(self.game.state["scores"], [0, 100, -100])
+        self.client.post("/undo", data={"next": "board"})
+        self.client.post("/undo", data={"next": "board"})
+        self.assertEqual(self.game.final_phase(), "bets")
+
+    def test_final_is_skipped_when_nobody_is_above_zero(self):
+        self.start_with_final()
+        self.judge(0, 0, "wrong", 0)
+        for c, r in [(0, 0), (0, 1), (1, 0)]:
+            self.judge(c, r, "nobody")
+        self.assertIn("finalen spilles ikke", self.client.get("/brett").get_data(as_text=True))
+        self.client.post("/finale/sporsmal")
+        self.assertTrue(self.game.is_over())
+        self.assertIn("Sluttresultat", self.client.get("/brett").get_data(as_text=True))
+
+    def test_final_countdown_carries_on_after_reload(self):
+        self.start_with_final()
+        self.play_board()
+        self.client.post("/finale/sporsmal")
+        final = self.game.state["final"]
+        final["question_at"] = "2000-01-01T00:00:00+00:00"
+        self.assertEqual(self.game.final_seconds_left(), 0)
+        self.assertIn("Tiden er ute!", self.client.get("/brett").get_data(as_text=True))
+
+    def test_final_steps_out_of_order_do_nothing(self):
+        self.start_with_final()
+        self.client.post("/finale/sporsmal")  # the board isn't empty yet
+        self.client.post("/finale/innsats")
+        self.client.post("/finale/vis-svar", data={"wager-0": "0"})
+        self.assertEqual(self.game.final_phase(), "category")
+        self.assertIn('class="board"', self.client.get("/brett").get_data(as_text=True))
+        self.assertEqual(self.client.post("/finale/svar", data={"player": "0", "result": "maybe"}).status_code, 400)
+
+    def test_final_on_rules_page_and_survives_reset(self):
+        self.start_with_final(seconds="45")
+        self.assertIn("<h2>Finale</h2>", self.client.get("/regler").get_data(as_text=True))
+        self.play_board()
+        self.client.post("/reset", data={"confirm": "yes"})
+        self.assertEqual(self.game.state["final"]["seconds"], 45)
+        self.assertEqual(self.game.final_phase(), "category")
+
 
 if __name__ == "__main__":
     unittest.main()

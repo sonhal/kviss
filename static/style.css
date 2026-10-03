@@ -298,6 +298,106 @@ a.cell:active { transform: scale(0.96); }
 }
 .dd-go:disabled { opacity: 0.5; cursor: default; }
 @media (prefers-reduced-motion: reduce) { .dd-title { animation: none; } }
+
+/* Final Jeopardy */
+.finale { gap: 2.5vmin; }
+.finale-label {
+  margin: 0;
+  color: var(--muted);
+  font-size: clamp(13px, 3.5vmin, 30px);
+  font-weight: 800;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+}
+.finale-category {
+  margin: 0;
+  color: var(--gold);
+  font-size: clamp(28px, 11vmin, 120px);
+  font-weight: 900;
+  line-height: 1.05;
+  text-transform: uppercase;
+  text-shadow: 0.04em 0.04em 0 #000;
+  animation: pop-in 0.6s cubic-bezier(0.2, 0.9, 0.3, 1.3) both;
+}
+.page-final-round .clue-text { font-size: clamp(18px, 6vmin, 64px); }
+.finale-help, .finale-question { margin: 0; max-width: 42em; color: var(--muted); font-size: clamp(13px, 3.2vmin, 28px); }
+.finale-teams, .finale-reveal {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--gap);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: clamp(13px, 3vmin, 26px);
+}
+.finale-teams li, .finale-reveal li {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 0.4em 0.7em;
+  border-radius: 6px;
+  background: var(--used);
+}
+.finale-teams li.out, .finale-reveal li.waiting { opacity: 0.4; }
+.finale-reveal li.ok { background: var(--ok); }
+.finale-reveal li.bad { background: var(--bad); }
+.finale-reveal li.now { outline: 2px solid var(--gold); background: var(--tile); }
+.finale-bets { display: flex; flex-direction: column; align-items: center; gap: 2vmin; }
+.finale-bet {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 0.4em 0.7em;
+  border-radius: 6px;
+  background: var(--tile);
+  font-size: clamp(13px, 3vmin, 26px);
+}
+.finale-judge { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0.5em; }
+.finale-judge input, .finale-bet input {
+  width: 5.5em;
+  margin-left: 0.3em;
+  padding: 0.2em 0.4em;
+  border: 2px solid var(--gold);
+  border-radius: 6px;
+  background: var(--used);
+  color: var(--gold);
+  font: inherit;
+  font-size: max(16px, 1em);
+  font-weight: 800;
+  text-align: center;
+}
+.finale-judge button {
+  min-width: 2.4em;
+  min-height: 2em;
+  border: 0;
+  border-radius: 6px;
+  font-weight: 800;
+}
+.finale-judge .ok { background: var(--ok); }
+.finale-judge .bad { background: var(--bad); }
+.countdown { display: flex; flex-direction: column; align-items: center; gap: 1vmin; width: min(100%, 70vmin); }
+.countdown-number {
+  color: var(--gold);
+  font-size: clamp(28px, 12vmin, 120px);
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.countdown-bar {
+  width: 100%;
+  height: clamp(6px, 1.5vmin, 14px);
+  border-radius: 999px;
+  background: var(--used);
+  overflow: hidden;
+}
+.countdown-bar span { display: block; height: 100%; background: var(--gold); transition: width 0.25s linear; }
+.countdown.ending .countdown-number { color: #ff6b6b; animation: winner 1s ease-in-out infinite; }
+.countdown.ending .countdown-bar span { background: #ff6b6b; }
+.countdown.over .countdown-number { color: #ff6b6b; font-size: clamp(22px, 8vmin, 80px); }
+@media (prefers-reduced-motion: reduce) {
+  .finale-category, .countdown.ending .countdown-number { animation: none; }
+}
 .nobody { height: 100%; padding: 0 1em; font-size: clamp(13px, 3vmin, 26px); }
 
 /* --- final (Kahoot-style podium) ---------------------------------------- */
@@ -543,6 +643,7 @@ a.cell:active { transform: scale(0.96); }
 .rule-bad .rule-icon { color: #ff6b6b; }
 .rule-win { border-top-color: var(--gold); }
 .rule-dd { border-top-color: var(--gold); }
+.rule-final { border-top-color: var(--gold); }
 .rule-cards.wide { grid-template-columns: repeat(4, 1fr); } /* 7 cards: 4 + 3 */
 .rules-facts {
   margin: 1.5vmin 0 0;
@@ -568,6 +669,7 @@ a.cell:active { transform: scale(0.96); }
 .host-meta { margin: 0.5rem 0; font-size: clamp(16px, 4vmin, 28px); font-weight: 700; text-transform: uppercase; }
 .host-question { margin: 0 0 1.2rem; font-size: clamp(18px, 4.5vmin, 34px); line-height: 1.3; }
 .host-music { margin: -0.6rem 0 1.2rem; color: var(--muted); font-size: clamp(14px, 3.5vmin, 22px); overflow-wrap: anywhere; }
+.host-final { margin: 0 0 1rem; padding-left: 1.2em; font-size: clamp(15px, 3.5vmin, 22px); line-height: 1.5; }
 .host-dd { margin: -0.4rem 0 1rem; font-size: clamp(16px, 4vmin, 26px); font-weight: 800; text-transform: uppercase; }
 .host-label { margin: 0; color: var(--muted); font-size: 14px; letter-spacing: 0.15em; text-transform: uppercase; }
 .host-answer {
@@ -643,6 +745,8 @@ a.cell:active { transform: scale(0.96); }
 }
 .players-form .confirm { display: block; margin-bottom: 1rem; }
 .dd-options { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 1.5rem; margin-bottom: 1.5rem; }
+.dd-options.disabled { opacity: 0.45; }
+.dd-options.disabled label { cursor: not-allowed; }
 .dd-options input[type=number] {
   width: 4.5em;
   margin-left: 0.4rem;

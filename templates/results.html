@@ -25,6 +25,29 @@
     </ol>
   </section>
 
+  {% if g.state.final and g.quiz.final %}
+  {% set final = g.state.final %}
+  <section>
+    <h2>Finale</h2>
+    <p><span class="gold">{{ g.quiz.final.category }}</span> · {{ g.quiz.final.question }}
+      <span class="muted">– {{ g.quiz.final.answer }}</span></p>
+    {% if final.wagers %}
+    <ul class="history">
+      {% for p in final.order %}
+      {% set result = g.final_result(p) %}
+      <li>{{ g.quiz.players[p] }}:
+        {% if result is not none %}{{ '✓ riktig' if result else '✗ feil' }}{% else %}<span class="muted">ikke vurdert</span>{% endif %},
+        satset <strong>{{ g.final_wager(p) }}</strong></li>
+      {% endfor %}
+    </ul>
+    {% elif final.phase == "done" %}
+    <p class="muted">Ingen hadde over 0 poeng, så finalen ble ikke spilt.</p>
+    {% else %}
+    <p class="muted">Ikke spilt.</p>
+    {% endif %}
+  </section>
+  {% endif %}
+
   <section class="results-wide">
     <h2>Spørsmål</h2>
     <div class="results-scroll">
