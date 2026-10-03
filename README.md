@@ -43,9 +43,10 @@ You add quizzes by uploading JSON files on **Last opp kviss** (`/last-opp`) or t
   **Nytt spill**, where you also set the countdown (30 seconds by default; the next game suggests the time you
   used last). When the board is empty, the TV shows the final's category instead of the podium, and which teams
   play: everyone above 0 points. Teams write their bet (0 up to their whole score) and their answer on paper.
-  **Vis spørsmålet** shows the question with the countdown, and **Avslør svarene** shows the answer. Then the
-  teams are revealed one at a time, lowest score first so the leader comes last: the host types the team's bet
-  and taps ✓ (adds it) or ✗ (subtracts it). Every result stays on the TV until **Se sluttresultat** goes on to the
+  **Vis spørsmålet** shows the question with the countdown. **Avslør svarene** then reveals the teams one at a
+  time, lowest score first so the leader comes last: the team shows its paper, and the host types the bet and
+  taps ✓ (adds it) or ✗ (subtracts it). The correct answer stays hidden meanwhile, so nobody can change their
+  paper after seeing it: the host can show it with **Vis svar**, and it shows by itself after the last team. Every result stays on the TV until **Se sluttresultat** goes on to the
   podium. If nobody is above 0, the final is skipped. The countdown carries on if the page is reloaded, the host view shows the answer, **Angre**
   steps back one reveal at a time, and the results page lists each team's bet.
 - **Resultat** (`/resultat/<id>`): one game's final ranking, when it started and ended, and a grid of every

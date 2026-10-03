@@ -40,14 +40,22 @@
     <span class="countdown-number">{% if left %}{{ left }}{% else %}Tiden er ute!{% endif %}</span>
     <div class="countdown-bar"><span style="width: {{ (100 * left / final.seconds)|round(1) }}%"></span></div>
   </div>
+  <p class="finale-help">Skriv svaret på lappen og legg den med forsiden ned. Lagene snur lappen én etter én.</p>
   <form method="post" action="{{ url_for('final_reveal') }}">
     <button class="dd-go">Avslør svarene</button>
   </form>
 
   {% else %}{# reveal #}
   <p class="finale-question">{{ quiz.final.question }}</p>
-  <p class="clue-answer">{{ quiz.final.answer }}</p>
   {% set next = game.final_next() %}
+  {# The answer stays hidden while teams are revealed, so nobody can change what they wrote after seeing it.
+     The host shows it when they want (app.js reveals it in place; the link is the no-JS fallback), and it
+     is always shown once every team is done. #}
+  {% set shown = next is none or request.args.get("reveal") == "1" %}
+  <p class="clue-answer"{% if not shown %} hidden{% endif %}>{{ quiz.final.answer }}</p>
+  {% if not shown %}
+  <a class="reveal" href="{{ url_for('board', reveal=1) }}">Vis svar</a>
+  {% endif %}
   <ol class="finale-reveal">
     {% for p in final.order %}
     {% set name = quiz.players[p] %}
@@ -59,6 +67,7 @@
     <li class="now">
       <form method="post" action="{{ url_for('final_judge') }}" class="finale-judge">
         <input type="hidden" name="player" value="{{ p }}">
+        <input type="hidden" name="reveal" value="{{ '1' if shown else '0' }}">
         <span class="player-name">{{ name }}</span>
         <label>Innsats <input type="number" name="wager" min="0" max="{{ game.state.scores[p] }}" step="1" required
           inputmode="numeric" value="{{ form.get('wager', '') if form else '' }}"></label>

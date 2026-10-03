@@ -709,7 +709,8 @@ def create_app(db_path=None, password=None, media_dir=None, seed=None):
             error = str(e)
         if error and game.final_on():
             return render_template("final_round.html", error=error, form=request.form), 400
-        return redirect(url_for("board"))
+        # Keep the answer showing if the host had already shown it.
+        return redirect(url_for("board", **({"reveal": "1"} if request.form.get("reveal") == "1" else {})))
 
     @app.get("/q/<int:c>/<int:r>")
     def question(c, r):

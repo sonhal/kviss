@@ -799,20 +799,24 @@ class KvissTest(unittest.TestCase):
         # 3. The reveal, one team at a time.
         self.client.post("/finale/avslor")
         page = self.client.get("/brett").get_data(as_text=True)
-        self.assertIn("1905", page)
+        self.assertIn('class="clue-answer" hidden>1905', page)  # nobody can change their paper after seeing it
+        self.assertIn('href="/brett?reveal=1">Vis svar', page)
+        self.assertIn('class="clue-answer">1905', self.client.get("/brett?reveal=1").get_data(as_text=True))
         self.assertIn('name="player" value="1"', page)
         self.client.post("/finale/svar", data={"player": "0", "wager": "200", "result": "correct"})  # not A's turn
         self.assertEqual(self.game.state["scores"], [200, 100, -100])
         resp = self.client.post("/finale/svar", data={"player": "1", "wager": "101", "result": "correct"})
         self.assertEqual(resp.status_code, 400)
         self.assertIn("B kan ha satset fra 0 til 100", resp.get_data(as_text=True))
-        self.client.post("/finale/svar", data={"player": "1", "wager": "100", "result": "correct"})
+        resp = self.client.post("/finale/svar", data={"player": "1", "wager": "100", "result": "correct", "reveal": "1"})
+        self.assertEqual(resp.headers["Location"], "/brett?reveal=1")  # shown stays shown
         self.client.post("/finale/svar", data={"player": "0", "wager": "200", "result": "wrong"})
         self.assertEqual(self.game.state["scores"], [0, 200, -100])
         # 4. Every result stays on the TV until the host moves on to the podium, with B the winner.
         self.assertFalse(self.game.is_over())
         page = self.client.get("/brett").get_data(as_text=True)
         self.assertIn('<li class="bad"><span class="player-name">A</span>', page)
+        self.assertIn('class="clue-answer">1905', page)  # everyone is done: the answer is shown
         self.client.post("/finale/ferdig")
         self.assertTrue(self.game.is_over())
         self.assertIn("Sluttresultat", self.client.get("/brett").get_data(as_text=True))
