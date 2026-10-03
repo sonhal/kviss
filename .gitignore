@@ -7,3 +7,4 @@ state.json
 media/
 kviss.db
 kviss.db-*
+.env

@@ -378,13 +378,15 @@ def create_app(db_path=None, password=None, media_dir=None, seed=None):
     password = password if password is not None else os.environ.get("KVISS_PASSWORD", "")
     if seed is None:
         seed = [_env_path("KVISS_CONFIG", BASE_DIR / "quiz.json"), BASE_DIR / "quiz-example.json"]
-    try:
-        tz = ZoneInfo(os.environ.get("KVISS_TZ", "Europe/Oslo"))
-    except (ZoneInfoNotFoundError, ValueError):
-        tz = timezone.utc
 
     app = Flask(__name__)
     app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD  # larger request bodies get 413 before they are read
+    tz_name = os.environ.get("KVISS_TZ") or "Europe/Oslo"
+    try:
+        tz = ZoneInfo(tz_name)
+    except (ZoneInfoNotFoundError, ValueError):
+        app.logger.warning("Unknown time zone KVISS_TZ=%r, showing dates in UTC", tz_name)
+        tz = timezone.utc
     store = Store(db_path)
     if store.is_empty():
         for path in seed:

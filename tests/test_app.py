@@ -425,6 +425,12 @@ class KvissTest(unittest.TestCase):
         self.make_client(seed=[BASE_DIR / "quiz-example.json"])
         self.assertEqual(len(self.client.get("/api/quizzes").get_json()), 2)  # library not empty: no import
 
+    def test_unknown_time_zone_falls_back_to_utc_with_warning(self):
+        with mock.patch.dict(os.environ, {"KVISS_TZ": "Europe/Olso"}), self.assertLogs("app", "WARNING") as logs:
+            app = create_app(db_path=self.db, password="", media_dir=self.media, seed=[])
+        self.assertIn("Europe/Olso", logs.output[0])
+        self.assertEqual(app.jinja_env.filters["when"]("2026-07-01T12:00:00+00:00"), "01.07.2026 12:00")
+
     def test_import_command(self):
         path = self.tmp / "q.json"
         path.write_text(json.dumps({**QUIZ, "title": "Fra fil"}))

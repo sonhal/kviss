@@ -1,0 +1,35 @@
+# docker compose up -d --build
+# The database and audio files live in the named volume "kviss-data", mounted at /data.
+# To use a folder on the host instead, see "Run with Docker" in README.md.
+services:
+  kviss:
+    build: .
+    image: kviss
+    restart: unless-stopped
+    ports:
+      # Only reachable from this host; Caddy (HTTPS) in front. Never drop the 127.0.0.1: Docker's port
+      # publishing bypasses ufw/firewalld, so "8000:8000" would expose plain HTTP to the internet.
+      - "127.0.0.1:8000:8000"
+    environment:
+      KVISS_PASSWORD: ${KVISS_PASSWORD:?set KVISS_PASSWORD in .env or the shell}
+      KVISS_TZ: ${KVISS_TZ:-Europe/Oslo}   # dates shown in the app
+      TZ: ${KVISS_TZ:-Europe/Oslo}         # timestamps in `docker compose logs` (otherwise UTC)
+    volumes:
+      - kviss-data:/data
+    # The same hardening as the systemd unit: only /data (and a scratch /tmp) is writable.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    # Docker keeps container logs forever by default; journald rotates them for systemd.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  kviss-data:

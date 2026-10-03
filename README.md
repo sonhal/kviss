@@ -227,6 +227,111 @@ HOST=0.0.0.0 .venv/bin/python app.py                      # reachable from your 
 .venv/bin/python -m unittest discover -s tests -t .      # tests
 ```
 
+## Run with Docker
+
+The image holds the app only. Everything that changes lives in **`/data`** inside the container, so mount a
+volume there:
+
+- `/data/kviss.db` is the database, with `kviss.db-wal` / `kviss.db-shm` next to it while the app runs. Mount the
+  **folder**, not just the `.db` file, because SQLite creates those extra files beside the database.
+- `/data/media/` holds audio files for music questions.
+
+Use the same environment variables as for systemd (`KVISS_PASSWORD`, `KVISS_TZ`, …). `KVISS_DB` and `KVISS_MEDIA`
+are already set to the paths above. On first start, an empty database imports `quiz.json` and `quiz-example.json`
+from the image, as described in [Managing quizzes](#managing-quizzes).
+
+### With Docker Compose
+
+```bash
+echo "KVISS_PASSWORD=$(openssl rand -base64 12)" > .env   # compose reads .env; it is in .gitignore
+docker compose up -d --build                              # http://127.0.0.1:8000
+docker compose logs -f
+```
+
+`compose.yaml` stores `/data` in a named volume, `kviss-data`, which survives `docker compose down`, rebuilds and
+image updates. Only `docker compose down -v` deletes it. The port is published on `127.0.0.1` only. Put Caddy in
+front for HTTPS: the site block in `deploy/kviss.caddy` works unchanged. Don't run the systemd service and the
+container at the same time, because both use port 8000.
+
+**Updating:** `git pull && docker compose up -d --build`. The volume, and with it every quiz and game, is kept.
+
+### With plain `docker run`
+
+```bash
+docker build -t kviss .
+docker run -d --name kviss --restart unless-stopped \
+  -p 127.0.0.1:8000:8000 -e KVISS_PASSWORD='your password' \
+  -v kviss-data:/data kviss
+```
+
+### Keeping the data in a folder on the host
+
+A **bind mount** is easier to back up and to copy audio files into than a named volume. The app runs as the
+unprivileged user `kviss` with **UID/GID 1000** inside the container, so that user must own the folder.
+Otherwise it stops with `sqlite3.OperationalError: unable to open database file`.
+
+```bash
+sudo mkdir -p /srv/kviss/media
+sudo chown -R 1000:1000 /srv/kviss
+docker run -d --name kviss --restart unless-stopped \
+  -p 127.0.0.1:8000:8000 -e KVISS_PASSWORD='your password' \
+  -v /srv/kviss:/data kviss
+```
+
+In `compose.yaml`, change `- kviss-data:/data` to `- /srv/kviss:/data`. To reuse the database from a systemd
+install, stop that service, copy `kviss.db` into the folder (with `kviss.db-wal`/`-shm` if they exist), and `chown`
+it as above. Add audio files with `sudo cp song.mp3 /srv/kviss/media/ && sudo chown 1000:1000 /srv/kviss/media/song.mp3`,
+or for a named volume use `docker cp song.mp3 kviss:/data/media/`.
+
+### Shell commands in the container
+
+```bash
+# The file is piped in, because compose.yaml makes the container's filesystem read-only (docker cp to /tmp fails)
+docker compose exec -T kviss python app.py import /dev/stdin < fredagskviss.json   # plain docker: docker exec -i kviss ...
+
+# consistent backup while it runs, written into the volume
+docker exec kviss python -c "import sqlite3; sqlite3.connect('/data/kviss.db').backup(sqlite3.connect('/data/backup.db'))"
+docker cp kviss:/data/backup.db .
+```
+
+### Differences from the systemd setup
+
+Mostly things that behave the same but are configured somewhere else:
+
+- **Time zones.** Dates in the app follow `KVISS_TZ` (default `Europe/Oslo`), not the server's or the container's
+  clock zone. The database stores UTC, so moving between systemd and Docker never shifts a date. A misspelled
+  zone (`Europe/Olso`) falls back to UTC with a warning in the log, so check the log if times are off by an hour or
+  two. The container's own clock is UTC unless `TZ` is set. `compose.yaml` sets `TZ` to the same zone, so the
+  timestamps in `docker compose logs` match (with plain `docker run`, add `-e TZ=Europe/Oslo`). The image has its own
+  copy of the time zone rules, which is updated when you rebuild it (`docker compose build --pull`), not by
+  `apt upgrade` on the host.
+- **Firewall.** A port published by Docker skips ufw/firewalld. Keep the `127.0.0.1:` in front of the port, or the
+  app is reachable over plain HTTP from the internet, whatever ufw says.
+- **Logs** are in `docker compose logs` instead of `journalctl -u kviss`. Docker never deletes old logs unless told
+  to, so `compose.yaml` keeps 3 × 10 MB. Add the same `--log-opt max-size=10m --log-opt max-file=3` to a plain
+  `docker run`. As with systemd, requests are not logged: the host view polls every 1.5 s.
+- **Hardening.** The systemd unit makes everything but `/opt/kviss` read-only. `compose.yaml` does the same with a
+  read-only root filesystem (only `/data` and an in-memory `/tmp` can be written), no Linux capabilities, and
+  `no-new-privileges`.
+- **Restarts.** `restart: unless-stopped` restarts the app if it crashes and after a reboot (if Docker starts at
+  boot: `systemctl is-enabled docker`). An `unhealthy` health check does **not** restart it, it only shows in
+  `docker ps`.
+- **Stopping.** `docker stop` waits 10 seconds, then kills the app. Every save is a single SQLite transaction, so
+  this can't corrupt the database. At worst the tap made during the stop is lost.
+- **Updates** come from rebuilding the image, not from `pip install` in a venv. `docker compose build --pull`
+  also picks up Python and Debian security fixes. The image runs Python 3.12 on Debian 13, where a Debian 12 VPS
+  runs 3.11. The tests pass on both.
+- **Files the app reads** must be inside the container. `KVISS_CONFIG` and audio files must be under `/data`;
+  host paths like `/opt/kviss/media` mean nothing in the container. `quiz.json` and `quiz-example.json` come from
+  the image, and are only read when the database is empty.
+- **Docker Desktop (Mac/Windows).** On a laptop, keep `/data` in a named volume. SQLite's locking and WAL files
+  can misbehave on folders shared from the host OS (especially `C:\` under Windows). On a Linux VPS, both kinds of
+  mount are fine.
+
+The container's health check counts any HTTP answer, including `401` from the password prompt, as healthy
+(`docker ps` shows `healthy`). The same single-gunicorn-worker rule from the security notes applies: run **one**
+container per database, and don't scale the service.
+
 ## Deploy to a VPS (systemd + venv + Caddy)
 
 These steps are for Debian 12 (bookworm) or newer, on a VPS that already runs Caddy for other sites.
