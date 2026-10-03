@@ -11,13 +11,16 @@
   <section>
     <p class="muted">{{ chosen.categories|map(attribute='name')|join(' · ') }} ({{ chosen.questions }} spørsmål)</p>
     <form method="post" class="players-form">
+      <label for="name"><h2>Navn på spillet</h2></label>
+      <p class="muted">Vises på TV-en og i historikken. Står det tomt, brukes navnet på kvissen.</p>
+      <input id="name" name="name" type="text" maxlength="80" value="{{ name }}" autocomplete="off">
       <label for="players"><h2>Deltakere</h2></label>
       <p class="muted">Ett lag eller én person per linje.</p>
       <textarea id="players" name="players" rows="4" required autofocus>{{ players }}</textarea>
       {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
       {% if game and game.in_progress() %}
       <label class="confirm"><input type="checkbox" name="confirm" value="yes" required>
-        Avslutt spillet som pågår ({{ game.quiz.title }}, {{ game.state.used|length }} av {{ game.total_questions() }}
+        Avslutt spillet som pågår ({{ game.name }}, {{ game.state.used|length }} av {{ game.total_questions() }}
         spørsmål spilt). Det lagres i historikken.</label>
       {% endif %}
       <button class="start">Start spillet</button>

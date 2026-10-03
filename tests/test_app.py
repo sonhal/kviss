@@ -327,6 +327,58 @@ class KvissTest(unittest.TestCase):
         self.assertIn(f'href="/resultat/{first}"', self.client.get("/admin").get_data(as_text=True))
         self.assertEqual(self.client.get("/resultat/999").status_code, 404)
 
+    def test_game_name(self):
+        page = self.client.get("/nytt/test").get_data(as_text=True)
+        self.assertRegex(page, r'name="name" type="text" maxlength="80" value="Test · \d\d\.\d\d\.\d{4}"')
+        self.judge(0, 0, "correct", 0)
+        first = self.game.id
+        self.start("test", ["C", "D"], name="  Julebord <2026>  ", confirm="yes")
+        self.assertEqual(self.game.name, "Julebord <2026>")  # trimmed, stored as typed
+        for url in ("/brett", "/", "/vert", "/admin", f"/resultat/{self.game.id}"):
+            page = self.client.get(url).get_data(as_text=True)
+            self.assertIn("Julebord &lt;2026&gt;", page, url)
+            self.assertNotIn("Julebord <2026>", page, url)
+        self.assertIn("<title>Julebord &lt;2026&gt;</title>", self.client.get("/brett").get_data(as_text=True))
+        self.assertIn('<span class="muted">Test</span>', self.client.get("/").get_data(as_text=True))  # the quiz
+        # Left empty, the game is named after the quiz.
+        self.assertEqual(self.client.get(f"/resultat/{first}").status_code, 200)
+        self.start("test", ["E", "F"], name="   ")
+        self.assertEqual(self.game.name, "Test")
+        with sqlite3.connect(self.db) as db:
+            names = db.execute("SELECT name FROM games ORDER BY id").fetchall()
+        # setUp's game (no name given) and the new one; the untouched Julebord game was dropped.
+        self.assertEqual(names, [(None,), (None,)])
+
+    def test_game_name_too_long(self):
+        resp = self.start("test", ["C", "D"], name="x" * 81)
+        self.assertEqual(resp.status_code, 400)
+        page = resp.get_data(as_text=True)
+        self.assertIn("maks 80 tegn", page)
+        self.assertIn('value="' + "x" * 81 + '"', page)  # what was typed is kept
+        self.assertEqual(self.game.quiz["players"], ["A", "B"])
+
+    def test_database_from_before_game_names(self):
+        self.db.unlink()
+        with sqlite3.connect(self.db) as db:  # the version 1 schema, with a game in progress
+            db.executescript("""
+                CREATE TABLE quizzes (id INTEGER PRIMARY KEY, slug TEXT NOT NULL UNIQUE, title TEXT NOT NULL,
+                    data TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+                CREATE TABLE games (id INTEGER PRIMARY KEY, quiz_id INTEGER REFERENCES quizzes(id) ON DELETE SET NULL,
+                    quiz TEXT NOT NULL, players TEXT NOT NULL, state TEXT NOT NULL, started_at TEXT NOT NULL,
+                    ended_at TEXT);
+                PRAGMA user_version = 1;
+            """)
+            db.execute("INSERT INTO games (quiz, players, state, started_at) VALUES (?, ?, ?, ?)",
+                       (json.dumps({k: v for k, v in QUIZ.items() if k != "players"}), '["A", "B"]',
+                        json.dumps({"scores": [100, 0], "used": {"0-0": 0}, "wrong": {}, "history": [{}]}),
+                        "2026-01-01T20:00:00+00:00"))
+        client = self.make_client()
+        self.assertEqual(self.game.name, "Test")
+        self.assertIn("<h1>Test</h1>", client.get("/brett").get_data(as_text=True))
+        with sqlite3.connect(self.db) as db:
+            self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 2)
+        self.make_client()  # opening it again doesn't try to add the column twice
+
     def test_untouched_game_is_not_kept(self):
         self.start("test", ["C", "D"])
         with sqlite3.connect(self.db) as db:

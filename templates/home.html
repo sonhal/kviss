@@ -12,7 +12,8 @@
     <section class="home-card">
       <h2>Pågående spill</h2>
       {% if game %}
-      <p><strong>{{ quiz.title }}</strong><br>
+      <p><strong>{{ game_name }}</strong><br>
+        {% if game_name != quiz.title %}<span class="muted">{{ quiz.title }}</span><br>{% endif %}
         <span class="muted">Startet {{ game.started_at|when }} ·
           {{ game.state.used|length }} av {{ game.total_questions() }} spørsmål spilt</span></p>
       <ol class="home-standings">
@@ -44,7 +45,8 @@
       {% set total = g.total_questions() %}
       <li>
         <a class="quiz-pick" href="{{ url_for('results', game_id=g.id) }}">
-          <strong>{{ g.quiz.title }}</strong>
+          <strong>{{ g.name }}</strong>
+          {% if g.name != g.quiz.title %}<span class="muted">{{ g.quiz.title }}</span>{% endif %}
           <span>🏆 {{ g.standings()|selectattr('place', 'equalto', 1)|map(attribute='name')|join(' og ') }}
             <span class="gold">{{ g.standings()[0].score }}</span></span>
           <span class="muted">{{ g.started_at|when }} · {{ g.quiz.players|length }} deltakere ·

@@ -21,6 +21,7 @@ from pydantic import (BaseModel, BeforeValidator, ConfigDict, Field, PlainSerial
 from pydantic_core import PydanticCustomError
 
 MAX_PLAYERS = 30
+MAX_GAME_NAME = 80
 MAX_NAME = 40
 MAX_CATEGORIES = 12
 MAX_QUESTIONS = 20  # per category
@@ -244,8 +245,16 @@ Checkbox = Annotated[bool, BeforeValidator(lambda v: v == "yes")]  # value="yes"
 
 
 class NewGameForm(_Form):
+    name: Annotated[str, StringConstraints(strip_whitespace=True)] = ""  # empty = named after the quiz
     players: Annotated[list[str], BeforeValidator(_lines)] = []
     confirm: Checkbox = False
+
+    @field_validator("name")
+    @classmethod
+    def _name(cls, name):
+        if len(name) > MAX_GAME_NAME:
+            raise _fail(f"Navnet på spillet kan være maks {MAX_GAME_NAME} tegn.")
+        return name
 
     @field_validator("players")
     @classmethod
