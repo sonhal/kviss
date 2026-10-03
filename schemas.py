@@ -27,6 +27,8 @@ MAX_CATEGORIES = 12
 MAX_QUESTIONS = 20  # per category
 MAX_TEXT = 1000     # a question or an answer
 MAX_SCORE_CHANGE = 100_000  # one manual adjustment on the admin page
+MAX_DAILY_DOUBLES = 10
+MIN_WAGER = 100  # the TV show uses 5, but kviss boards count in hundreds
 YOUTUBE_ID = re.compile(r"[A-Za-z0-9_-]{11}")
 SLUG = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 AUDIO_TYPES = {".mp3", ".m4a", ".aac", ".wav"}  # formats both Safari and Chrome play
@@ -248,6 +250,22 @@ class NewGameForm(_Form):
     name: Annotated[str, StringConstraints(strip_whitespace=True)] = ""  # empty = named after the quiz
     players: Annotated[list[str], BeforeValidator(_lines)] = []
     confirm: Checkbox = False
+    # Daily Doubles: hidden on this many tiles, picked at random when the game starts.
+    daily_double: Checkbox = False
+    daily_doubles: int = 0  # 0 when daily_double is off
+
+    @field_validator("daily_doubles", mode="before")
+    @classmethod
+    def _daily_doubles(cls, value, info: ValidationInfo):
+        if not info.data.get("daily_double"):
+            return 0  # switched off: the number field is ignored
+        try:
+            value = int(value)
+        except (TypeError, ValueError):
+            raise _fail("Skriv antall Dagens dobbel som et helt tall.") from None
+        if not 1 <= value <= MAX_DAILY_DOUBLES:
+            raise _fail(f"Antall Dagens dobbel må være fra 1 til {MAX_DAILY_DOUBLES}.")
+        return value
 
     @field_validator("name")
     @classmethod
@@ -283,6 +301,27 @@ class JudgeForm(_Form):
         if self.result != "nobody" and self.player is None:
             raise _fail("'player' is required")
         return self
+
+
+class WagerForm(_Form):
+    """The bet on a Daily Double. The upper limit depends on the game, so Game.wager checks it."""
+    player: PlayerIndex | None = None
+    amount: int
+
+    @field_validator("player", mode="before")
+    @classmethod
+    def _picked(cls, player):
+        if player in (None, ""):
+            raise _fail("Velg hvem som fant Dagens dobbel.")
+        return player
+
+    @field_validator("amount", mode="before")
+    @classmethod
+    def _whole_number(cls, amount):
+        try:
+            return int(amount)
+        except (TypeError, ValueError):
+            raise _fail("Skriv innsatsen som et helt tall.") from None
 
 
 class AdjustForm(_Form):

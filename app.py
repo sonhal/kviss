@@ -29,8 +29,8 @@ from flask import (Flask, Response, abort, jsonify, redirect, render_template, r
                    url_for)
 from werkzeug.exceptions import RequestEntityTooLarge
 
-from schemas import (AdjustForm, ConfigError, ConfirmForm, FormError, JudgeForm, NewGameForm, UndoForm, parse_form,
-                     parse_quiz)
+from schemas import (MIN_WAGER, AdjustForm, ConfigError, ConfirmForm, FormError, JudgeForm, NewGameForm, UndoForm,
+                     WagerForm, parse_form, parse_quiz)
 
 BASE_DIR = Path(__file__).resolve().parent
 mimetypes.add_type("application/manifest+json", ".webmanifest")
@@ -94,7 +94,7 @@ CREATE TABLE IF NOT EXISTS games (
     quiz       TEXT NOT NULL,           -- frozen copy of the quiz as it was when the game started
     name       TEXT,                    -- set by the host when starting; NULL = named after the quiz
     players    TEXT NOT NULL,           -- JSON list of names
-    state      TEXT NOT NULL,           -- JSON: scores, used, wrong, undo history
+    state      TEXT NOT NULL,           -- JSON: scores, used, wrong, Daily Doubles, undo history
     started_at TEXT NOT NULL,
     ended_at   TEXT                     -- NULL for the game on the TV right now
 );
@@ -105,13 +105,35 @@ PRAGMA user_version = 2;
 """
 
 
-def fresh_state(n_players):
+def fresh_state(n_players, daily_doubles=()):
     return {
         "scores": [0] * n_players,
         "used": {},     # "c-r" -> index of player who answered correctly, or None
         "wrong": {},    # "c-r" -> [indexes of players who answered wrong]
+        "daily_doubles": list(daily_doubles),  # ["c-r", ...], hidden until the tile is opened
+        "wagers": {},   # "c-r" -> {"player": index, "amount": points} for Daily Doubles
         "history": [],  # snapshots for undo
     }
+
+
+def pick_daily_doubles(quiz, count):
+    """Hide Daily Doubles on `count` random tiles, as "c-r" keys. Like on the TV show, no two
+    share a category unless there are more Daily Doubles than categories.
+
+    Uses the system's random source, so nobody (not even the host) can work out where they are.
+    """
+    rng = secrets.SystemRandom()
+    tiles = [(c, r) for c, cat in enumerate(quiz["categories"]) for r in range(len(cat["questions"]))]
+    rng.shuffle(tiles)
+    picked, categories = [], set()
+    for c, r in tiles:  # one per category first ...
+        if len(picked) < count and c not in categories:
+            picked.append((c, r))
+            categories.add(c)
+    for tile in tiles:  # ... then fill up if there are more Daily Doubles than categories
+        if len(picked) < count and tile not in picked:
+            picked.append(tile)
+    return [f"{c}-{r}" for c, r in sorted(picked)]
 
 
 class Store:
@@ -188,10 +210,10 @@ class Store:
 
     # --- games -------------------------------------------------------------
 
-    def start_game(self, slug, players, name=None):
-        """End the current game and start a new one. Returns the new game's row, or None
-        if there is no such quiz. A current game where nothing was scored is dropped
-        instead of being kept in the history."""
+    def start_game(self, slug, players, name=None, daily_doubles=0):
+        """End the current game and start a new one, with `daily_doubles` Daily Doubles hidden
+        on the board. Returns the new game's row, or None if there is no such quiz. A current
+        game where nothing was scored is dropped instead of being kept in the history."""
         with self._db() as db:
             quiz = db.execute("SELECT id, data FROM quizzes WHERE slug = ?", (slug,)).fetchone()
             if quiz is None:
@@ -201,10 +223,11 @@ class Store:
                 db.execute("DELETE FROM games WHERE id = ?", (current["id"],))
             elif current:
                 db.execute("UPDATE games SET ended_at = ? WHERE id = ?", (now(), current["id"]))
+            state = fresh_state(len(players), pick_daily_doubles(json.loads(quiz["data"]), daily_doubles))
             game_id = db.execute(
                 "INSERT INTO games (quiz_id, quiz, name, players, state, started_at) VALUES (?, ?, ?, ?, ?, ?)",
                 (quiz["id"], quiz["data"], name or None, json.dumps(players, ensure_ascii=False),
-                 json.dumps(fresh_state(len(players))), now())).lastrowid
+                 json.dumps(state), now())).lastrowid
             return db.execute("SELECT * FROM games WHERE id = ?", (game_id,)).fetchone()
 
     def current_game(self):
@@ -244,7 +267,7 @@ class Game:
         # Templates read the players from quiz.players, as when they lived in the quiz file.
         self.quiz = {**json.loads(row["quiz"]), "players": json.loads(row["players"])}
         self.name = row["name"] or self.quiz["title"]  # games from before names existed: the quiz title
-        self.state = json.loads(row["state"])
+        self.state = {"daily_doubles": [], "wagers": {}, **json.loads(row["state"])}  # older games have neither
         self.started_at, self.ended_at = row["started_at"], row["ended_at"]
         self.audio_files = {q["audio"] for cat in self.quiz["categories"]  # the only files /media/ serves
                             for q in cat["questions"] if q.get("audio")}
@@ -261,7 +284,7 @@ class Game:
         self.version += 1
 
     def _checkpoint(self):
-        snap = {k: copy.deepcopy(self.state[k]) for k in ("scores", "used", "wrong")}
+        snap = {k: copy.deepcopy(self.state[k]) for k in ("scores", "used", "wrong", "wagers")}
         self.state["history"] = (self.state["history"] + [snap])[-UNDO_LIMIT:]
 
     # --- queries -----------------------------------------------------------
@@ -294,6 +317,32 @@ class Game:
     def can_undo(self):
         return bool(self.state["history"])
 
+    # Daily Doubles
+
+    def is_daily_double(self, c, r):
+        return f"{c}-{r}" in self.state["daily_doubles"]
+
+    def daily_double_shown(self, c, r):
+        """A Daily Double everyone has seen: opened and bet on, played, or left when the game ended.
+        Anything that lists tiles uses this, so the others stay a surprise."""
+        return self.is_daily_double(c, r) and (self.wager(c, r) is not None or self.is_used(c, r)
+                                                or bool(self.ended_at))
+
+    def wager(self, c, r):
+        """The bet on a Daily Double, {"player": index, "amount": points}, or None before the bet."""
+        return self.state["wagers"].get(f"{c}-{r}")
+
+    def top_value(self):
+        return max(q["value"] for cat in self.quiz["categories"] for q in cat["questions"])
+
+    def min_wager(self):
+        """MIN_WAGER, or less on a board whose values are all smaller than that."""
+        return min(MIN_WAGER, self.top_value())
+
+    def max_wager(self, player):
+        """Your whole score, or the highest value on the board if that is more (as on the TV show)."""
+        return max(self.state["scores"][player], self.top_value())
+
     def standings(self):
         players = [{"name": n, "score": s} for n, s in zip(self.quiz["players"], self.state["scores"])]
         players.sort(key=lambda p: p["score"], reverse=True)
@@ -305,13 +354,30 @@ class Game:
 
     # --- actions -----------------------------------------------------------
 
-    def set_current(self, c=None, r=None):
-        """Remember which question the TV shows (None = the board), for the host view."""
-        current = None if c is None else (c, r)
+    def set_current(self, c=None, r=None, test=False):
+        """Remember which question the TV shows (None = the board), for the host view.
+        test: opened from the admin page's music check, which doesn't reveal Daily Doubles."""
+        current = None if c is None else (c, r, test)
         with self.lock:
             if current != self.current:
                 self.current = current
                 self.version += 1
+
+    def place_wager(self, c, r, player, amount):
+        """Bet on a Daily Double. Returns None, or a message for the host if the bet isn't allowed."""
+        key = f"{c}-{r}"
+        with self.lock:
+            if not self.is_daily_double(c, r) or key in self.state["used"] or key in self.state["wagers"]:
+                return None  # nothing to bet on (any more): the question page shows what happened
+            if not 0 <= player < len(self.state["scores"]):
+                return "Velg hvem som fant Dagens dobbel."
+            top = self.max_wager(player)
+            if not self.min_wager() <= amount <= top:
+                return f"{self.quiz['players'][player]} kan satse fra {self.min_wager()} til {top}."
+            self._checkpoint()
+            self.state["wagers"][key] = {"player": player, "amount": amount}
+            self._save()
+            return None
 
     def judge(self, c, r, player, result):
         """Apply a host decision. Returns True if the question is now finished."""
@@ -320,6 +386,8 @@ class Game:
         with self.lock:
             if key in self.state["used"]:
                 return True
+            if self.is_daily_double(c, r):
+                return self._judge_daily_double(key, player, result)
             if result == "nobody":
                 self._checkpoint()
                 self.state["used"][key] = None
@@ -338,6 +406,22 @@ class Game:
             self._save()
             return key in self.state["used"]
 
+    def _judge_daily_double(self, key, player, result):
+        """Only the player who bet answers, once: right wins the bet, wrong loses it. Called with the lock held."""
+        wager = self.state["wagers"].get(key)
+        if wager is None or player != wager["player"] or result not in ("correct", "wrong"):
+            return False
+        self._checkpoint()
+        if result == "correct":
+            self.state["scores"][player] += wager["amount"]
+            self.state["used"][key] = player
+        else:
+            self.state["scores"][player] -= wager["amount"]
+            self.state["wrong"][key] = [player]
+            self.state["used"][key] = None
+        self._save()
+        return True
+
     def adjust(self, player, delta):
         with self.lock:
             if not (0 <= player < len(self.state["scores"])) or delta == 0:
@@ -354,8 +438,10 @@ class Game:
             self._save()
 
     def reset(self):
+        """Start the board over. The Daily Doubles move, since the room has seen where some of them were."""
         with self.lock:
-            self.state = fresh_state(len(self.quiz["players"]))
+            hidden = pick_daily_doubles(self.quiz, len(self.state["daily_doubles"]))
+            self.state = fresh_state(len(self.quiz["players"]), hidden)
             self._save()
 
 
@@ -369,9 +455,9 @@ class Kviss:
         row = store.current_game()
         self.game = Game(row, store) if row else None
 
-    def start(self, slug, players, name=None):
+    def start(self, slug, players, name=None, daily_doubles=0):
         with self.lock:
-            row = self.store.start_game(slug, players, name)
+            row = self.store.start_game(slug, players, name, daily_doubles)
             if row is None:
                 return None
             # Continue the version count so the host view always notices the switch.
@@ -489,10 +575,31 @@ def create_app(db_path=None, password=None, media_dir=None, seed=None):
         q = game.question(c, r)
         if q is None:
             abort(404)
-        game.set_current(c, r)
+        # ?test=1: the admin page's music check. It shows the question without judge buttons
+        # and without giving away a Daily Double.
+        test = request.args.get("test") == "1"
+        game.set_current(c, r, test)
+        category = game.quiz["categories"][c]["name"]
+        if game.is_daily_double(c, r) and game.wager(c, r) is None and not game.is_used(c, r) and not test:
+            return render_template("daily_double.html", c=c, r=r, q=q, category=category)
         reveal = request.args.get("reveal") == "1" or game.is_used(c, r)
-        return render_template("question.html", c=c, r=r, q=q,
-                               category=game.quiz["categories"][c]["name"], reveal=reveal)
+        return render_template("question.html", c=c, r=r, q=q, category=category, reveal=reveal, test=test)
+
+    @app.post("/q/<int:c>/<int:r>/wager")
+    def wager(c, r):
+        game = current_game()
+        q = game.question(c, r)
+        if q is None:
+            abort(404)
+        try:
+            bet = parse_form(WagerForm, request.form.to_dict())
+            error = game.place_wager(c, r, bet.player, bet.amount)
+        except FormError as e:
+            error = str(e)
+        if error:
+            return render_template("daily_double.html", c=c, r=r, q=q, error=error,
+                                   category=game.quiz["categories"][c]["name"], form=request.form), 400
+        return redirect(url_for("question", c=c, r=r))
 
     @app.post("/q/<int:c>/<int:r>/judge")
     def judge(c, r):
@@ -517,9 +624,11 @@ def create_app(db_path=None, password=None, media_dir=None, seed=None):
         game = kviss.game
         ctx = {"current": None, "version": game.version if game else 0}
         if game and game.current:
-            c, r = game.current
+            c, r, test = game.current
             ctx["current"] = {
                 "c": c, "r": r, "q": game.question(c, r),
+                # The TV shows the Daily Double as soon as the tile is opened, so the host may see it too.
+                "daily_double": game.is_daily_double(c, r) and not test, "wager": game.wager(c, r),
                 "category": game.quiz["categories"][c]["name"],
                 "wrong": [game.quiz["players"][p] for p in game.wrong_players(c, r)],
                 "used": game.is_used(c, r), "winner": game.winner(c, r),
@@ -567,12 +676,17 @@ def create_app(db_path=None, password=None, media_dir=None, seed=None):
             return render_template("new_game_players.html", chosen=chosen, name=name, players="\n".join(players))
         try:
             entry = parse_form(NewGameForm, request.form.to_dict())
+            if entry.daily_doubles > chosen["questions"]:
+                raise FormError(f"Kvissen har bare {chosen['questions']} spørsmål, så det kan ikke være flere "
+                                "Dagens dobbel enn det.")
             if game and game.in_progress() and not entry.confirm:
                 raise FormError("Kryss av for å avslutte spillet som pågår.")
         except FormError as e:
             return render_template("new_game_players.html", chosen=chosen, name=request.form.get("name", "").strip(),
-                                   players=request.form.get("players", "").strip(), error=str(e)), 400
-        if kviss.start(slug, entry.players, entry.name) is None:  # deleted in the meantime
+                                   players=request.form.get("players", "").strip(), error=str(e),
+                                   daily_double=request.form.get("daily_double") == "yes",
+                                   daily_doubles=request.form.get("daily_doubles", "1")), 400
+        if kviss.start(slug, entry.players, entry.name, entry.daily_doubles) is None:  # deleted in the meantime
             abort(404)
         return redirect(url_for("board"))
 

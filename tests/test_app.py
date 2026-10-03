@@ -228,7 +228,7 @@ class KvissTest(unittest.TestCase):
         client.get("/q/0/2")
         self.assertIn("♪ YouTube dQw4w9WgXcQ,\n    1:15–1:30", client.get("/vert").get_data(as_text=True))
         admin = client.get("/admin").get_data(as_text=True)
-        self.assertIn('href="/q/0/2"', admin)
+        self.assertIn('href="/q/0/2?test=1"', admin)
         self.assertIn("Svar", admin)
 
     # --- quiz library and games ----------------------------------------------
@@ -609,6 +609,132 @@ class KvissTest(unittest.TestCase):
         self.assertIn("replaced 'fra-fil'", out.getvalue())
         self.assertIsNotNone(self.client.get("/api/quizzes/fra-fil").get_json())
 
+
+    # --- Daily Doubles ---------------------------------------------------------
+
+    def start_with_daily_doubles(self, count=1):
+        resp = self.start("test", ["A", "B"], daily_double="yes", daily_doubles=str(count), confirm="yes")
+        self.assertEqual(resp.status_code, 302)
+        return [tuple(map(int, key.split("-"))) for key in self.game.state["daily_doubles"]]
+
+    def wager(self, c, r, player, amount):
+        return self.client.post(f"/q/{c}/{r}/wager", data={"player": str(player), "amount": str(amount)})
+
+    def test_no_daily_doubles_unless_switched_on(self):
+        self.assertEqual(self.game.state["daily_doubles"], [])
+        self.start("test", ["A", "B"], daily_doubles="3")  # the number alone doesn't switch it on
+        self.assertEqual(self.game.state["daily_doubles"], [])
+        self.assertIn("Q1", self.client.get("/q/0/0").get_data(as_text=True))
+
+    def test_daily_doubles_are_hidden_in_different_categories(self):
+        for _ in range(10):
+            tiles = self.start_with_daily_doubles(2)
+            self.assertEqual(len(tiles), 2)
+            self.assertEqual({c for c, _ in tiles}, {0, 1})  # two categories, so one in each
+        # More than there are categories: the rest go anywhere, never twice on one tile.
+        self.assertEqual(len(set(self.start_with_daily_doubles(3))), 3)
+        # Nothing shows where they are until a tile is opened.
+        for page in ("/brett", "/vert", "/admin", "/"):
+            self.assertNotIn("Dagens dobbel", self.client.get(page).get_data(as_text=True), page)
+        self.assertNotIn('class="results-dd"', self.client.get(f"/resultat/{self.game.id}").get_data(as_text=True))
+        self.assertIn("3 ruter skjuler", self.client.get("/regler").get_data(as_text=True))
+
+    def test_daily_double_count_is_checked(self):
+        for count, message in [("0", "fra 1 til 10"), ("11", "fra 1 til 10"), ("x", "helt tall"),
+                               ("4", "bare 3 spørsmål")]:
+            resp = self.start("test", ["C", "D"], daily_double="yes", daily_doubles=count)
+            self.assertEqual(resp.status_code, 400, count)
+            page = resp.get_data(as_text=True)
+            self.assertIn(message, page)
+            self.assertIn('name="daily_double" value="yes" checked', page)  # the form keeps what was typed
+        self.assertEqual(self.game.quiz["players"], ["A", "B"])
+
+    def test_daily_double_right_answer_wins_the_bet(self):
+        [(c, r)] = self.start_with_daily_doubles()
+        q = self.game.question(c, r)
+        page = self.client.get(f"/q/{c}/{r}").get_data(as_text=True)
+        self.assertIn("Dagens dobbel!", page)
+        self.assertNotIn(q["question"].replace("<", "&lt;"), page)  # the clue waits for the bet
+        self.assertNotIn(q["answer"], page)
+        self.assertIn("Venter på innsats", self.client.get("/vert").get_data(as_text=True))
+        # No judging before the bet.
+        self.judge(c, r, "correct", 0)
+        self.assertEqual(self.game.state["scores"], [0, 0])
+        # A player with less than the top value (200) may still bet up to it.
+        for player, amount in [(0, 201), (0, 99), ("", 100)]:
+            resp = self.wager(c, r, player, amount)
+            self.assertEqual(resp.status_code, 400, (player, amount))
+        self.assertIn("A kan satse fra 100 til 200", self.wager(c, r, 0, 201).get_data(as_text=True))
+        self.assertEqual(self.wager(c, r, 0, 150).status_code, 302)
+        page = self.client.get(f"/q/{c}/{r}").get_data(as_text=True)
+        self.assertIn("A satser", page)
+        self.assertIn('name="player" value="0"', page)
+        self.assertNotIn('name="player" value="1"', page)  # only the one who bet answers
+        self.assertNotIn('value="nobody"', page)
+        self.assertIn("A satser <span class=\"gold\">150", self.client.get("/vert").get_data(as_text=True))
+        self.judge(c, r, "correct", 1)
+        self.assertEqual(self.game.state["scores"], [0, 0])
+        self.assertEqual(self.judge(c, r, "correct", 0).headers["Location"], "/brett")
+        self.assertEqual(self.game.state["scores"], [150, 0])
+        self.assertTrue(self.game.is_used(c, r))
+        self.assertIn("vant\n    150 poeng", self.client.get(f"/q/{c}/{r}").get_data(as_text=True))
+        self.assertIn("Dagens dobbel · satset 150", self.client.get(f"/resultat/{self.game.id}").get_data(as_text=True))
+
+    def test_daily_double_wrong_answer_loses_the_bet_and_ends_the_question(self):
+        [(c, r)] = self.start_with_daily_doubles()
+        other = next((oc, orow) for oc, cat in enumerate(QUIZ["categories"])
+                     for orow in range(len(cat["questions"])) if (oc, orow) != (c, r))
+        self.judge(*other, "correct", 1)
+        value = self.game.question(*other)["value"]
+        self.wager(c, r, 1, value)  # a whole score
+        self.judge(c, r, "wrong", 1)
+        self.assertEqual(self.game.state["scores"], [0, 0])
+        self.assertTrue(self.game.is_used(c, r))  # nobody else gets to try
+        self.assertIsNone(self.game.winner(c, r))
+        # Undo takes back the answer, then the bet.
+        self.client.post("/undo", data={"next": "board"})
+        self.assertEqual(self.game.state["scores"], [0, value])
+        self.assertIsNotNone(self.game.wager(c, r))
+        self.client.post("/undo", data={"next": "board"})
+        self.assertIsNone(self.game.wager(c, r))
+        self.assertIn("Dagens dobbel!", self.client.get(f"/q/{c}/{r}").get_data(as_text=True))
+
+    def test_minimum_bet_is_never_above_the_board(self):
+        small = {"title": "Små", "categories": [{"name": "C", "questions": [
+            {"value": 10, "question": "Q", "answer": "A"}, {"value": 50, "question": "Q2", "answer": "A2"}]}]}
+        self.upload(small)
+        self.start("sma", ["A", "B"], daily_double="yes", daily_doubles="1")
+        [key] = self.game.state["daily_doubles"]
+        c, r = map(int, key.split("-"))
+        self.assertIn("fra 50 til 50", self.wager(c, r, 0, 51).get_data(as_text=True))
+        self.assertEqual(self.wager(c, r, 0, 50).status_code, 302)
+
+    def test_daily_double_survives_restart_and_moves_on_reset(self):
+        self.start_with_daily_doubles(2)
+        hidden = self.game.state["daily_doubles"]
+        self.make_client()
+        self.assertEqual(self.game.state["daily_doubles"], hidden)
+        self.client.post("/reset", data={"confirm": "yes"})
+        self.assertEqual(len(self.game.state["daily_doubles"]), 2)
+
+    def test_admin_music_check_does_not_give_away_a_daily_double(self):
+        [(c, r)] = self.start_with_daily_doubles()
+        page = self.client.get(f"/q/{c}/{r}?test=1").get_data(as_text=True)
+        self.assertNotIn("Dagens dobbel", page)
+        self.assertNotIn('value="correct"', page)  # a check, not a turn
+        self.assertNotIn("Dagens dobbel", self.client.get("/vert").get_data(as_text=True))
+        self.assertIn("Dagens dobbel!", self.client.get(f"/q/{c}/{r}").get_data(as_text=True))
+
+    def test_finished_game_shows_every_daily_double(self):
+        tiles = self.start_with_daily_doubles(2)
+        normal = next((c, r) for c, cat in enumerate(QUIZ["categories"])
+                      for r in range(len(cat["questions"])) if (c, r) not in tiles)
+        self.judge(*normal, "correct", 0)
+        game_id = self.game.id
+        results = f"/resultat/{game_id}"
+        self.assertEqual(self.client.get(results).get_data(as_text=True).count('class="results-dd"'), 0)
+        self.start("test", ["C", "D"], confirm="yes")  # ends it with both still hidden
+        self.assertEqual(self.client.get(results).get_data(as_text=True).count('class="results-dd"'), 2)
 
 if __name__ == "__main__":
     unittest.main()

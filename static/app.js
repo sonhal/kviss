@@ -195,6 +195,19 @@
     }
   }
 
+  // --- Daily Double: the bet can't be more than the chosen player may bet ----
+  // The server checks it too; this just stops the browser from sending a bet it would refuse.
+  const ddForm = document.querySelector(".dd-form");
+  if (ddForm) {
+    const amount = ddForm.querySelector('input[name="amount"]');
+    const limit = () => {
+      const picked = ddForm.querySelector('input[name="player"]:checked');
+      if (picked) amount.max = picked.dataset.max;
+    };
+    ddForm.addEventListener("change", limit);
+    limit();
+  }
+
   // --- Judge buttons: no double submits, a little haptic feedback -----------
   document.addEventListener("submit", (e) => {
     const form = e.target;

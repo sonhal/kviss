@@ -50,7 +50,7 @@
     <p>Test at alle klippene spiller før spillet starter. Å åpne et spørsmål endrer ikke poengene.</p>
     <ul class="music-list">
       {% for c, r, name, q in music %}
-      <li><a class="gold" href="{{ url_for('question', c=c, r=r) }}">{{ name }} · {{ q.value }}</a>
+      <li><a class="gold" href="{{ url_for('question', c=c, r=r, test=1) }}">{{ name }} · {{ q.value }}</a>
         {{ q.answer }} <span class="muted">({% if q.youtube %}YouTube {{ q.youtube }}{% else %}{{ q.audio }}{% endif %},
         {{ (q.start or 0)|mmss }}–{% if q.end %}{{ q.end|mmss }}{% else %}slutt{% endif %})</span></li>
       {% endfor %}
