@@ -334,6 +334,10 @@ class Game:
     def top_value(self):
         return max(q["value"] for cat in self.quiz["categories"] for q in cat["questions"])
 
+    def min_wager(self):
+        """MIN_WAGER, or less on a board whose values are all smaller than that."""
+        return min(MIN_WAGER, self.top_value())
+
     def max_wager(self, player):
         """Your whole score, or the highest value on the board if that is more (as on the TV show)."""
         return max(self.state["scores"][player], self.top_value())
@@ -367,8 +371,8 @@ class Game:
             if not 0 <= player < len(self.state["scores"]):
                 return "Velg hvem som fant Dagens dobbel."
             top = self.max_wager(player)
-            if not MIN_WAGER <= amount <= top:
-                return f"{self.quiz['players'][player]} kan satse fra {MIN_WAGER} til {top}."
+            if not self.min_wager() <= amount <= top:
+                return f"{self.quiz['players'][player]} kan satse fra {self.min_wager()} til {top}."
             self._checkpoint()
             self.state["wagers"][key] = {"player": player, "amount": amount}
             self._save()
@@ -576,7 +580,7 @@ def create_app(db_path=None, password=None, media_dir=None, seed=None):
         game.set_current(c, r, test)
         category = game.quiz["categories"][c]["name"]
         if game.is_daily_double(c, r) and game.wager(c, r) is None and not game.is_used(c, r) and not test:
-            return render_template("daily_double.html", c=c, r=r, q=q, category=category, min_wager=MIN_WAGER)
+            return render_template("daily_double.html", c=c, r=r, q=q, category=category)
         reveal = request.args.get("reveal") == "1" or game.is_used(c, r)
         return render_template("question.html", c=c, r=r, q=q, category=category, reveal=reveal, test=test)
 
@@ -592,7 +596,7 @@ def create_app(db_path=None, password=None, media_dir=None, seed=None):
         except FormError as e:
             error = str(e)
         if error:
-            return render_template("daily_double.html", c=c, r=r, q=q, error=error, min_wager=MIN_WAGER,
+            return render_template("daily_double.html", c=c, r=r, q=q, error=error,
                                    category=game.quiz["categories"][c]["name"], form=request.form), 400
         return redirect(url_for("question", c=c, r=r))
 

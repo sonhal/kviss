@@ -599,10 +599,10 @@ class KvissTest(unittest.TestCase):
         self.judge(c, r, "correct", 0)
         self.assertEqual(self.game.state["scores"], [0, 0])
         # A player with less than the top value (200) may still bet up to it.
-        for player, amount in [(0, 201), (0, 4), ("", 100)]:
+        for player, amount in [(0, 201), (0, 99), ("", 100)]:
             resp = self.wager(c, r, player, amount)
             self.assertEqual(resp.status_code, 400, (player, amount))
-        self.assertIn("A kan satse fra 5 til 200", self.wager(c, r, 0, 201).get_data(as_text=True))
+        self.assertIn("A kan satse fra 100 til 200", self.wager(c, r, 0, 201).get_data(as_text=True))
         self.assertEqual(self.wager(c, r, 0, 150).status_code, 302)
         page = self.client.get(f"/q/{c}/{r}").get_data(as_text=True)
         self.assertIn("A satser", page)
@@ -636,6 +636,16 @@ class KvissTest(unittest.TestCase):
         self.client.post("/undo", data={"next": "board"})
         self.assertIsNone(self.game.wager(c, r))
         self.assertIn("Dagens dobbel!", self.client.get(f"/q/{c}/{r}").get_data(as_text=True))
+
+    def test_minimum_bet_is_never_above_the_board(self):
+        small = {"title": "Små", "categories": [{"name": "C", "questions": [
+            {"value": 10, "question": "Q", "answer": "A"}, {"value": 50, "question": "Q2", "answer": "A2"}]}]}
+        self.upload(small)
+        self.start("sma", ["A", "B"], daily_double="yes", daily_doubles="1")
+        [key] = self.game.state["daily_doubles"]
+        c, r = map(int, key.split("-"))
+        self.assertIn("fra 50 til 50", self.wager(c, r, 0, 51).get_data(as_text=True))
+        self.assertEqual(self.wager(c, r, 0, 50).status_code, 302)
 
     def test_daily_double_survives_restart_and_moves_on_reset(self):
         self.start_with_daily_doubles(2)

@@ -10,7 +10,7 @@
 <main class="clue">
   <p class="dd-title">Dagens dobbel!</p>
   <form method="post" action="{{ url_for('wager', c=c, r=r) }}" class="dd-form">
-    <p class="dd-help">Hvem fant den? Sats fra {{ min_wager }} poeng opp til hele poengsummen din,
+    <p class="dd-help">Hvem fant den? Sats fra {{ game.min_wager() }} poeng opp til hele poengsummen din,
       eller opp til {{ game.top_value() }} hvis du har mindre enn det.</p>
     <div class="dd-players">
       {% for name in quiz.players %}
@@ -23,7 +23,7 @@
       {% endfor %}
     </div>
     <label class="dd-amount">Innsats
-      <input type="number" name="amount" min="{{ min_wager }}" step="1" required inputmode="numeric"
+      <input type="number" name="amount" min="{{ game.min_wager() }}" step="1" required inputmode="numeric"
              value="{{ form.get('amount', '') if form else '' }}">
     </label>
     {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
