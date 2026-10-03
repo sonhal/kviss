@@ -17,5 +17,6 @@
         { "value": 200, "question": "Dette bandet ga ut «Take On Me» i 1985.", "answer": "a-ha" }
       ]
     }
-  ]
+  ],
+  "final": { "category": "Norsk historie", "question": "I dette året ble unionen med Sverige oppløst.", "answer": "1905" }
 }

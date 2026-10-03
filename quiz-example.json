@@ -52,5 +52,6 @@
         { "value": 500, "question": "Den legendariske byen Timbuktu ligger i dette vestafrikanske landet.", "answer": "Mali" }
       ]
     }
-  ]
+  ],
+  "final": { "category": "Polarhistorie", "question": "Denne nordmannen ledet ekspedisjonen som først nådde Sydpolen, 14. desember 1911.", "answer": "Roald Amundsen" }
 }

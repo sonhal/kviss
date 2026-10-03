@@ -39,6 +39,15 @@ You add quizzes by uploading JSON files on **Last opp kviss** (`/last-opp`) or t
   ✗ subtracts it and ends the question. **Angre** takes back the answer, and then the bet. Results pages mark the
   Daily Doubles that were found, and every one once the game has ended. **Nullstill spill** hides them on new
   tiles. The music check on the admin page (`?test=1`) never shows a Daily Double and can't score.
+- **Finale** (Final Jeopardy, for quizzes with a [`final`](#the-quiz-format) question): ticked by default on
+  **Nytt spill**, where you also set the countdown (30 seconds by default; the next game suggests the time you
+  used last). When the board is empty, the TV shows the final's category instead of the podium, and which teams
+  play: everyone above 0 points. Teams write their bet (0 up to their whole score) and their answer on paper.
+  **Vis spørsmålet** shows the question with the countdown, and **Avslør svarene** shows the answer. Then the
+  teams are revealed one at a time, lowest score first so the leader comes last: the host types the team's bet
+  and taps ✓ (adds it) or ✗ (subtracts it). Every result stays on the TV until **Se sluttresultat** goes on to the
+  podium. If nobody is above 0, the final is skipped. The countdown carries on if the page is reloaded, the host view shows the answer, **Angre**
+  steps back one reveal at a time, and the results page lists each team's bet.
 - **Resultat** (`/resultat/<id>`): one game's final ranking, when it started and ended, and a grid of every
   question showing who answered it right (✓), wrong (✗), nobody, or that it was never played. Opened from the
   landing page or the admin history.
@@ -141,7 +150,9 @@ sudo -u kviss /opt/kviss/.venv/bin/python /opt/kviss/app.py import /tmp/fredagsk
 Rules: a `title`, at least 1 category, and every question needs a positive integer `value`, a `question` and an
 `answer`. `players` is optional. It only pre-fills the names on the new-game screen, and you can change them
 there. If it's left out, the names from the last game are pre-filled instead. `slug` is optional (see above). A question can also play a song: see
-[Music questions](#music-questions). Categories can have different numbers of questions. Missing slots show
+[Music questions](#music-questions). `final` is optional: a Final Jeopardy question with a `category`, a
+`question` and an `answer`, played after the board (see **Finale** above), e.g.
+`"final": { "category": "Norsk historie", "question": "I dette året ble unionen med Sverige oppløst.", "answer": "1905" }`. Categories can have different numbers of questions. Missing slots show
 as blank tiles. Up to about 6 categories × 5 questions reads well on a TV.
 
 The app checks the quiz when you upload it and rejects it with a clear message if something is wrong, for
@@ -232,8 +243,9 @@ Things to know about YouTube:
 ### Prompt for generating questions with an AI
 
 > Create a Jeopardy-style quiz as JSON with exactly this structure:
-> `{"title": str, "players": [str], "categories": [{"name": str, "questions": [{"value": int, "question": str, "answer": str}]}]}`.
+> `{"title": str, "players": [str], "categories": [{"name": str, "questions": [{"value": int, "question": str, "answer": str}]}], "final": {"category": str, "question": str, "answer": str}}`.
 > Make 5 categories about **<TOPICS>**, each with 5 questions valued 100, 200, 300, 400, 500, increasing in difficulty.
+> `final` is one extra, hard Final Jeopardy question in its own category.
 > Players: **<NAMES>**. Write each question as a clue, and keep the answer short (1–5 words).
 > Language: **Norwegian (bokmål)**. Output only the JSON, with no commentary.
 

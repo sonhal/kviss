@@ -28,6 +28,8 @@ MAX_QUESTIONS = 20  # per category
 MAX_TEXT = 1000     # a question or an answer
 MAX_SCORE_CHANGE = 100_000  # one manual adjustment on the admin page
 MAX_DAILY_DOUBLES = 10
+FINAL_SECONDS = 30  # the Final Jeopardy countdown, unless the host picks another
+MIN_FINAL_SECONDS, MAX_FINAL_SECONDS = 5, 600
 MIN_WAGER = 100  # the TV show uses 5, but kviss boards count in hundreds
 YOUTUBE_ID = re.compile(r"[A-Za-z0-9_-]{11}")
 SLUG = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
@@ -130,12 +132,20 @@ class Category(_Strict):
     questions: Annotated[list[Question], Field(min_length=1, max_length=MAX_QUESTIONS)]
 
 
+class Final(_Strict):
+    """Final Jeopardy: one last question, shown after the board is empty. The category is shown first."""
+    category: Text(100)
+    question: Text(MAX_TEXT)
+    answer: Text(MAX_TEXT)
+
+
 class Quiz(_Strict):
     title: Text(100)
     slug: Annotated[str, Field(max_length=60)] | None = None  # made from the title when left out
     # Names suggested on the new-game screen. The host can change them there.
     players: Annotated[list[Text(MAX_NAME)], Field(max_length=MAX_PLAYERS)] = []
     categories: Annotated[list[Category], Field(min_length=1, max_length=MAX_CATEGORIES)]
+    final: Final | None = None
 
     @field_validator("slug")
     @classmethod
@@ -267,6 +277,23 @@ class NewGameForm(_Form):
             raise _fail(f"Antall Dagens dobbel må være fra 1 til {MAX_DAILY_DOUBLES}.")
         return value
 
+    # Final Jeopardy, for quizzes that have one: the countdown in seconds, 0 = no final.
+    final: Checkbox = False
+    final_seconds: int = 0
+
+    @field_validator("final_seconds", mode="before")
+    @classmethod
+    def _final_seconds(cls, value, info: ValidationInfo):
+        if not info.data.get("final"):
+            return 0
+        try:
+            value = int(value)
+        except (TypeError, ValueError):
+            raise _fail("Skriv tiden til finalen som et helt antall sekunder.") from None
+        if not MIN_FINAL_SECONDS <= value <= MAX_FINAL_SECONDS:
+            raise _fail(f"Tiden til finalen må være fra {MIN_FINAL_SECONDS} til {MAX_FINAL_SECONDS} sekunder.")
+        return value
+
     @field_validator("name")
     @classmethod
     def _name(cls, name):
@@ -320,6 +347,21 @@ class WagerForm(_Form):
     def _whole_number(cls, amount):
         try:
             return int(amount)
+        except (TypeError, ValueError):
+            raise _fail("Skriv innsatsen som et helt tall.") from None
+
+
+class FinalJudgeForm(_Form):
+    """One team's Final Jeopardy bet and whether their answer was right. Game.judge_final checks the bet."""
+    player: PlayerIndex
+    result: Literal["correct", "wrong"]
+    wager: int
+
+    @field_validator("wager", mode="before")
+    @classmethod
+    def _whole_number(cls, wager):
+        try:
+            return int(wager)
         except (TypeError, ValueError):
             raise _fail("Skriv innsatsen som et helt tall.") from None
 
