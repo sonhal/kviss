@@ -91,6 +91,7 @@ jobs:
           context: .
           load: true
           tags: kviss:ci
+          build-args: VERSION=ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -115,7 +116,9 @@ jobs:
           # Without credentials the app must refuse; with them it must serve
           # the start page from the seeded database.
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/)" = 401
-          curl -fsS -u kviss:ci http://127.0.0.1:8000/ > /dev/null
+          # The VERSION build arg must reach the footer.
+          home=$(curl -fsS -u kviss:ci http://127.0.0.1:8000/)
+          grep -q 'Kviss ci</footer>' <<<"$home"
           docker exec kviss test -f /data/kviss.db
 
   # Runs on pushes to main once everything else has passed. If the commits
@@ -229,6 +232,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: VERSION=${{ github.ref_name }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

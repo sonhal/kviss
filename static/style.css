@@ -823,6 +823,7 @@ a.cell:active { transform: scale(0.96); }
 .home-btn:hover, .home-btn:active { background: var(--tile-hover); }
 .home-btn.start { background: var(--ok); }
 .home-btn.start:hover, .home-btn.start:active { filter: brightness(1.15); }
+.home-version { margin-top: 2rem; font-size: 12px; opacity: 0.6; }
 
 .results-ranking { list-style: none; padding: 0; margin: 0; font-size: 1.15em; line-height: 1.7; }
 .results-ranking .rest-place { display: inline-block; min-width: 1.8em; color: var(--muted); }

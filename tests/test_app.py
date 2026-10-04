@@ -231,6 +231,23 @@ class KvissTest(unittest.TestCase):
         self.assertIn('href="/q/0/2?test=1"', admin)
         self.assertIn("Svar", admin)
 
+    def test_version_in_home_footer(self):
+        with mock.patch.dict(os.environ, {"KVISS_VERSION": "v1.2.3"}):
+            client = self.make_client()
+        self.assertIn('<footer class="home-version muted">Kviss v1.2.3</footer>', client.get("/").get_data(as_text=True))
+        self.assertNotIn("home-version", client.get("/admin").get_data(as_text=True))
+
+    def test_no_footer_without_version(self):
+        with mock.patch.dict(os.environ, {"KVISS_VERSION": ""}), mock.patch("subprocess.run", side_effect=OSError):
+            client = self.make_client()
+        self.assertNotIn("home-version", client.get("/").get_data(as_text=True))
+
+    def test_version_from_git_checkout(self):
+        done = mock.Mock(stdout="v0.5.0-2-gabc1234\n")
+        with mock.patch.dict(os.environ, {"KVISS_VERSION": ""}), mock.patch("subprocess.run", return_value=done):
+            client = self.make_client()
+        self.assertIn("Kviss v0.5.0-2-gabc1234</footer>", client.get("/").get_data(as_text=True))
+
     # --- quiz library and games ----------------------------------------------
 
     def test_no_game_goes_to_landing_page(self):

@@ -23,6 +23,10 @@ COPY app.py schemas.py quiz.json quiz-example.json /app/
 COPY static /app/static
 COPY templates /app/templates
 
+# The version shown on the start page. CI's Release job passes the tag (v0.5.0); a local build says "dev".
+ARG VERSION=dev
+ENV KVISS_VERSION=$VERSION
+
 USER kviss
 # A directory, not a single file: SQLite writes kviss.db-wal and kviss.db-shm next to the database.
 VOLUME ["/data"]

@@ -366,6 +366,9 @@ Mostly things that behave the same but are configured somewhere else:
   timestamps in `docker compose logs` match (with plain `docker run`, add `-e TZ=Europe/Oslo`). The image has its own
   copy of the time zone rules, which is updated when you rebuild it (`docker compose build --pull`), not by
   `apt upgrade` on the host.
+- **Version.** The start page's footer shows the version. Release images from `ghcr.io/sonhal/kviss` carry their
+  tag (`v0.5.0`); an image built locally with `docker compose up -d --build` says `dev`, since `.git` isn't copied
+  into the image. Pass the tag yourself with `docker compose build --build-arg VERSION=$(git describe --tags)`.
 - **Firewall.** A port published by Docker skips ufw/firewalld. Keep the `127.0.0.1:` in front of the port, or the
   app is reachable over plain HTTP from the internet, whatever ufw says.
 - **Logs** are in `docker compose logs` instead of `journalctl -u kviss`. Docker never deletes old logs unless told
@@ -490,7 +493,9 @@ sudo -u kviss /opt/kviss/.venv/bin/python -c "import sqlite3; sqlite3.connect('/
 ```
 
 Settings in `/etc/kviss.env` (all optional): `KVISS_PASSWORD`, `KVISS_DB` (database path), `KVISS_MEDIA` (audio
-folder), `KVISS_CONFIG` (quiz imported on first start) and `KVISS_TZ` (time zone for dates, default `Europe/Oslo`).
+folder), `KVISS_CONFIG` (quiz imported on first start), `KVISS_TZ` (time zone for dates, default `Europe/Oslo`)
+and `KVISS_VERSION` (the version in the start page's footer; by default `git describe` of the checkout, such as
+`v0.5.0` or `v0.5.0-2-gabc1234` for two commits past it).
 
 ### Security notes
 
