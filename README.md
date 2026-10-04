@@ -121,6 +121,10 @@ as seconds (`75`) or minutes (`1:15`).
   back later continues that draft, with a button to throw it away and start again from the stored version.
 - **A new quiz never replaces another one by accident.** If its title gives a slug that is already taken, the page
   asks before replacing that quiz.
+- **▶ Test** under **♪ Musikk** plays the clip as the question screen will: from Start, stopping by itself at Slutt
+  (or at the end of the song), with the time shown while it plays. **■ Stopp** stops it, and only one clip plays at a
+  time. A YouTube clip plays in the same invisible player as in the game, so a video whose owner blocks playing it
+  outside YouTube says so here, before game night. An audio file must already be in the media folder on the server.
 - **Last ned som fil** downloads the draft as quiz JSON, for a backup or for **Last opp kviss** on another server.
 - The builder needs JavaScript; without it, the page points to **Last opp kviss**.
 
@@ -537,7 +541,9 @@ folder), `KVISS_CONFIG` (quiz imported on first start) and `KVISS_TZ` (time zone
   that browser profile can read them, so on a shared computer, save or delete drafts when you're done.
 - A `youtube` value must be exactly an 11-character ID (`A-Z a-z 0-9 _ -`), so the quiz file can't point the
   player at anything else. `/media/` serves only the audio files the current game's quiz names, from inside the `media/`
-  folder, and is behind the same password as everything else.
+  folder, and is behind the same password as everything else. The builder's **▶ Test** uses `/lag/lyd/`, which serves
+  any audio file (`.mp3`, `.m4a`, `.aac`, `.wav`) in `media/`, so a clip can be heard before the quiz is saved. It is
+  behind the password too, refuses other file types, and can't reach outside the folder.
 - The systemd unit runs as an unprivileged user with a read-only filesystem except for `/opt/kviss`.
 - The app deliberately runs a **single** gunicorn worker. The current game is also held in memory in that one
   process, along with the question the TV shows for the host view, so do not raise `--workers`.

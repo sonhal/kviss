@@ -900,3 +900,5 @@ a.cell:active { transform: scale(0.96); }
 .builder-actions .start { padding: 0 1.2em; }
 .builder-saved-title { color: var(--gold); }
 .builder-actions button { font-size: 18px; }
+.builder-clip .builder-test { margin-left: auto; padding: 0 1em; }
+.builder-preview { margin: 0.2rem 0 0; font-size: 14px; }

@@ -631,11 +631,32 @@ class KvissTest(unittest.TestCase):
         resp = self.client.post("/lag", json={})
         self.assertEqual(resp.get_json()["problems"], [{"message": "top level must be an object", "location": []}])
 
+    def test_builder_plays_any_audio_file_in_the_media_folder(self):
+        (self.media / "80s").mkdir(parents=True)
+        (self.media / "80s" / "take on me.mp3").write_bytes(b"ID3 song")
+        (self.media / "notes.txt").write_text("secret")
+        (self.tmp / "outside.mp3").write_bytes(b"ID3 outside")
+        # Not in any quiz, so /media/ won't serve it, but the builder can test it before saving.
+        self.assertEqual(self.client.get("/media/80s/take%20on%20me.mp3").status_code, 404)
+        resp = self.client.get("/lag/lyd/80s/take%20on%20me.mp3")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data, b"ID3 song")
+        self.assertEqual(resp.mimetype, "audio/mpeg")
+        resp.close()
+        resp = self.client.get("/lag/lyd/80s/take%20on%20me.mp3", headers={"Range": "bytes=0-2"})
+        self.assertEqual((resp.status_code, resp.data), (206, b"ID3"))  # Safari needs ranges to play and seek
+        resp.close()
+        for path in ("/lag/lyd/notes.txt", "/lag/lyd/missing.mp3", "/lag/lyd/../outside.mp3",
+                     "/lag/lyd/%2e%2e/outside.mp3", "/lag/lyd/80s/..%2f..%2foutside.mp3"):
+            self.assertEqual(self.client.get(path).status_code, 404, path)
+        self.assertIn('data-audio-url="/lag/lyd/"', self.client.get("/lag").get_data(as_text=True))
+
     def test_builder_needs_password_and_same_origin(self):
         client = self.make_client(password="s3cret")
         auth = {"Authorization": "Basic " + base64.b64encode(b":s3cret").decode()}
         quiz = {"quiz": {**QUIZ, "title": "Hemmelig"}}
         self.assertEqual(client.get("/lag").status_code, 401)
+        self.assertEqual(client.get("/lag/lyd/song.mp3").status_code, 401)
         self.assertEqual(client.post("/lag", json=quiz).status_code, 401)
         resp = client.post("/lag", json=quiz, headers={**auth, "Origin": "https://evil.example"})
         self.assertEqual(resp.status_code, 403)

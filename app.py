@@ -31,8 +31,8 @@ from flask import (Flask, Response, abort, jsonify, redirect, render_template, r
                    url_for)
 from werkzeug.exceptions import RequestEntityTooLarge
 
-from schemas import (FINAL_SECONDS, MIN_WAGER, AdjustForm, ConfigError, ConfirmForm, FinalJudgeForm, FormError,
-                     JudgeForm, NewGameForm, UndoForm, WagerForm, parse_form, parse_quiz)
+from schemas import (AUDIO_TYPES, FINAL_SECONDS, MIN_WAGER, AdjustForm, ConfigError, ConfirmForm, FinalJudgeForm,
+                     FormError, JudgeForm, NewGameForm, UndoForm, WagerForm, parse_form, parse_quiz)
 
 BASE_DIR = Path(__file__).resolve().parent
 mimetypes.add_type("application/manifest+json", ".webmanifest")
@@ -916,6 +916,14 @@ def create_app(db_path=None, password=None, media_dir=None, seed=None):
         if q is None:
             abort(404)
         return render_template("builder.html", quizzes=store.quizzes(), source=downloadable(q))
+
+    @app.get("/lag/lyd/<path:name>")
+    def preview_audio(name):
+        """Any audio file in the media folder, so the builder can test a clip before the quiz is saved.
+        /media/ only serves the current game's files. send_from_directory refuses paths outside the folder."""
+        if Path(name).suffix.lower() not in AUDIO_TYPES:
+            abort(404)
+        return send_from_directory(kviss.media_dir, name)
 
     @app.post("/lag")
     def save_built_quiz():

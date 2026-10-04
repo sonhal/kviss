@@ -163,6 +163,7 @@
   let resumedId = null; // a draft of the quiz on /lag/<slug> that was there before the page opened
 
   function show(name) {
+    stopClip();
     for (const [key, el] of Object.entries(views)) el.hidden = key !== name;
     window.scrollTo(0, 0);
   }
@@ -246,6 +247,7 @@
   }
 
   function renderCategories() {
+    stopClip();
     clearProblems();
     const cats = current.quiz.categories;
     $(".builder-categories", editor).replaceChildren(...cats.map(categoryEl));
@@ -296,7 +298,9 @@
         text: "Filen må ligge på serveren før du lagrer (.mp3, .m4a, .aac eller .wav)." }),
       h("div", { class: "builder-row builder-clip" },
         field("Start", "start", { placeholder: "0:00" }),
-        field("Slutt", "end", { placeholder: "slutten" })));
+        field("Slutt", "end", { placeholder: "slutten" }),
+        h("button", { type: "button", class: "tool builder-test", "data-action": "test", text: "▶ Test" })),
+      h("p", { class: "muted builder-preview", "aria-live": "polite", hidden: true }));
     music.querySelector("select").value = q.source;
     showMusicFields(music, q.source);
     return h("li", { class: "builder-question", "data-loc": path },
@@ -336,7 +340,10 @@
     setStatus(putDraft(current) ? `Utkast lagret ${when(current.updated)}` : "Utkastet kunne ikke lagres i nettleseren");
   }
 
-  addEventListener("pagehide", () => { if (saveTimer) saveNow(); });
+  addEventListener("pagehide", () => {
+    stopClip();
+    if (saveTimer) saveNow();
+  });
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden" && saveTimer) saveNow();
   });
@@ -351,7 +358,10 @@
     el.classList.remove("invalid");
     el.removeAttribute("aria-invalid");
     if (el.dataset.path === "finalOn") $(".builder-final", editor).disabled = !value;
-    if (el.dataset.path.endsWith(".source")) showMusicFields(el.closest(".builder-music"), value);
+    if (el.dataset.path.endsWith(".source")) {
+      if (clip?.question === el.closest(".builder-question")) stopClip();
+      showMusicFields(el.closest(".builder-music"), value);
+    }
     saveSoon();
   });
 
@@ -408,6 +418,10 @@
         dropDraft(draft.id);
         renderDrafts();
       }
+      return;
+    }
+    if (action === "test") {
+      testClip(button.closest(".builder-question"));
       return;
     }
     if (action === "reload-source") {
@@ -471,6 +485,158 @@
     link.click();
     setTimeout(() => URL.revokeObjectURL(link.href), 1000);
   });
+
+  // --- testing a clip ---------------------------------------------------------------
+  // ▶ Test plays the clip as the question screen will: from Start, stopping at Slutt.
+  // One clip at a time. YouTube plays in the same invisible player as in the game (the
+  // embed shows the title), so a video the owner won't allow outside YouTube fails here
+  // too, with the same message. Audio files come from /lag/lyd/, which serves any file in
+  // the media folder: /media/ only serves the files of the game on the TV.
+
+  // The same messages as on the question screen (app.js).
+  const YOUTUBE_ERRORS = {
+    2: "Ugyldig YouTube-ID.",
+    5: "YouTube-videoen kan ikke spilles i nettleseren.",
+    100: "YouTube-videoen finnes ikke eller er privat.",
+    101: "Eieren tillater ikke at denne videoen spilles utenfor YouTube.",
+    150: "Eieren tillater ikke at denne videoen spilles utenfor YouTube.",
+  };
+
+  let clip = null; // the clip playing: { question, button, status, start, end, stop(message) } and its player
+  const mmss = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
+
+  function say(status, message) {
+    status.textContent = message;
+    status.hidden = !message;
+  }
+
+  function stopClip(message = "") {
+    if (!clip) return;
+    const stopped = clip;
+    clip = null;
+    clearInterval(stopped.timer);
+    clearTimeout(stopped.startCheck);
+    stopped.player.stop();
+    stopped.button.textContent = "▶ Test";
+    say(stopped.status, message);
+  }
+
+  function testClip(question) {
+    const button = question.querySelector(".builder-test");
+    const status = question.querySelector(".builder-preview");
+    if (clip?.button === button) {
+      stopClip();
+      return;
+    }
+    stopClip();
+    const q = getPath(current.quiz, question.dataset.loc);
+    const start = seconds(q.start) ?? 0;
+    const end = seconds(q.end);
+    if (typeof start !== "number") return say(status, "Start må være sekunder (75) eller minutter og sekunder (1:15).");
+    if (end !== null && typeof end !== "number") {
+      return say(status, "Slutt må være sekunder (90) eller minutter og sekunder (1:30).");
+    }
+    if (end !== null && end <= start) return say(status, "Slutt må være etter start.");
+    const id = youtubeId(q.youtube);
+    if (q.source === "youtube" && !/^[\w-]{11}$/.test(id)) {
+      return say(status, "Lim inn en YouTube-lenke eller en video-ID først.");
+    }
+    if (q.source === "audio" && !q.audio.trim()) return say(status, "Skriv filnavnet først.");
+
+    const playing = { question, button, status, start, end };
+    // Errors arrive later; only the clip that caused them may stop.
+    const fail = (message) => { if (clip === playing) stopClip(message); };
+    playing.player = q.source === "youtube" ? youtubeClip(id, start, fail) : audioClip(q.audio.trim(), start, fail);
+    clip = playing;
+    button.textContent = "■ Stopp";
+    say(status, "Laster …");
+    playing.timer = setInterval(() => {
+      if (clip !== playing || !playing.player.playing()) return;
+      const t = playing.player.time();
+      if (end !== null && t >= end) {
+        stopClip(`Ferdig: spilte ${mmss(start)}–${mmss(end)} (${mmss(end - start)}).`);
+        return;
+      }
+      say(status, `▶ ${mmss(t)}${end !== null ? ` · stopper ved ${mmss(end)}` : " · spiller til slutten"}`);
+    }, 200);
+    // Browsers may block playback; say so instead of waiting silently.
+    playing.startCheck = setTimeout(() => {
+      if (clip === playing && !playing.player.playing()) stopClip("Starter ikke? Trykk ▶ Test igjen.");
+    }, 6000);
+    playing.player.play();
+  }
+
+  function audioClip(name, start, fail) {
+    const url = root.dataset.audioUrl + name.split("/").map(encodeURIComponent).join("/");
+    // #t= starts the first play at `start`, even before the file has loaded (iPhone).
+    const el = new Audio(`${url}#t=${start}`);
+    el.addEventListener("error", () => fail(`Fant ikke lydfilen «${name}» i media-mappen på serveren.`));
+    el.addEventListener("ended", () => fail("Ferdig: spilte til slutten av lydfilen."));
+    return {
+      play: () => el.play().catch((e) => { if (e.name !== "AbortError") fail("Lyden startet ikke. Trykk ▶ Test igjen."); }),
+      stop: () => el.pause(),
+      time: () => el.currentTime,
+      playing: () => !el.paused && el.currentTime > 0,
+    };
+  }
+
+  // One hidden YouTube player for the page, made the first time a YouTube clip is tested.
+  let youtubePlayer = null;
+
+  function loadYouTube() {
+    youtubePlayer ??= new Promise((resolve, reject) => {
+      const create = () => {
+        const holder = h("div", { class: "music-yt", "aria-hidden": "true" }, h("div"));
+        document.body.append(holder);
+        const player = new YT.Player(holder.firstElementChild, {
+          host: "https://www.youtube-nocookie.com",
+          width: 200,
+          height: 200,
+          playerVars: { controls: 0, disablekb: 1, fs: 0, rel: 0, playsinline: 1, iv_load_policy: 3, origin: location.origin },
+          events: {
+            onReady: () => resolve(player),
+            onError: (e) => clip?.player.fail?.(YOUTUBE_ERRORS[e.data] || `YouTube-feil ${e.data}.`),
+          },
+        });
+      };
+      if (window.YT?.Player) {
+        create();
+        return;
+      }
+      const previous = window.onYouTubeIframeAPIReady;
+      window.onYouTubeIframeAPIReady = () => { if (previous) previous(); create(); };
+      const script = h("script", { src: "https://www.youtube.com/iframe_api" });
+      script.onerror = () => {
+        youtubePlayer = null; // try again next time
+        reject(new Error("no YouTube"));
+      };
+      document.head.append(script);
+    });
+    return youtubePlayer;
+  }
+
+  function youtubeClip(id, start, fail) {
+    let player = null;
+    let stopped = false;
+    const state = () => player?.getPlayerState?.() ?? -1;
+    return {
+      fail,
+      play: () => loadYouTube().then((p) => {
+        if (stopped) return;
+        player = p;
+        p.loadVideoById({ videoId: id, startSeconds: start });
+      }, () => fail("Fikk ikke kontakt med YouTube.")),
+      stop: () => {
+        stopped = true;
+        player?.stopVideo();
+      },
+      time: () => player?.getCurrentTime() || 0,
+      playing: () => {
+        if (state() === YT.PlayerState.ENDED) fail("Ferdig: spilte til slutten av videoen.");
+        return state() === YT.PlayerState.PLAYING;
+      },
+    };
+  }
 
   // --- problems from the server ---------------------------------------------------
 

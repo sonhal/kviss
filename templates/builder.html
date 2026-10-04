@@ -20,7 +20,8 @@
   </noscript>
   {% if source %}<script type="application/json" id="builder-source">{{ source|tojson }}</script>{% endif %}
 
-  <div id="builder" data-save-url="{{ url_for('save_built_quiz') }}" data-home-url="{{ url_for('build_quiz') }}" hidden>
+  <div id="builder" data-save-url="{{ url_for('save_built_quiz') }}" data-home-url="{{ url_for('build_quiz') }}"
+       data-audio-url="{{ url_for('build_quiz') }}/lyd/" hidden>
     <p class="form-error" id="builder-no-storage" role="alert" hidden>Nettleseren lar ikke kviss lagre utkast
       (privat surfing?). Du kan bygge kvissen, men den blir borte hvis du lukker siden før du lagrer.</p>
 
