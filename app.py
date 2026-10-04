@@ -2,7 +2,8 @@
 
 Quizzes (title, categories, questions) are stored in a SQLite database and can be
 played again and again with different players. Quizzes are added as JSON through
-the API (/api/quizzes) or the `import` command. The host picks a quiz and types
+the API (/api/quizzes), uploaded or built in the browser (/last-opp, /lag), or with
+the `import` command. The host picks a quiz and types
 the players on /nytt, which starts a game.
 
 Each game keeps a frozen copy of the quiz it was started with, so editing or
@@ -897,6 +898,50 @@ def create_app(db_path=None, password=None, media_dir=None, seed=None):
         status = 400 if all(r["problems"] for r in results) else 200
         return render_template("upload.html", results=results), status
 
+    # --- building a quiz in the browser ------------------------------------------
+    # static/builder.js keeps drafts in the browser's localStorage while they are being written,
+    # and posts the finished quiz here as JSON. It is checked exactly like an upload.
+
+    def downloadable(q):
+        """A stored quiz as it can be uploaded again."""
+        return {k: q[k] for k in ("slug", "title", "players", "categories", "final") if k in q}
+
+    @app.get("/lag")
+    def build_quiz():
+        return render_template("builder.html", quizzes=store.quizzes(), source=None)
+
+    @app.get("/lag/<slug>")
+    def edit_quiz(slug):
+        q = store.quiz(slug)
+        if q is None:
+            abort(404)
+        return render_template("builder.html", quizzes=store.quizzes(), source=downloadable(q))
+
+    @app.post("/lag")
+    def save_built_quiz():
+        """Body: {"quiz": {...}, "replaces": slug of the quiz the draft was opened from, or null,
+        "overwrite": true to replace another quiz that has the same slug}.
+
+        400 lists every problem with where it is, 409 means the save would replace a quiz the
+        draft wasn't made from (the page asks first), 200/201 is saved.
+        """
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict) or not isinstance(body.get("replaces") or "", str):
+            return api_error("expected a JSON object with a 'quiz'", 400)
+        try:
+            quiz = validate_quiz(body.get("quiz"), kviss.media_dir)
+        except ConfigError as e:
+            return jsonify(error=str(e), problems=[{"message": m, "location": loc}
+                                                   for m, loc in zip(e.problems, e.locations)]), 400
+        existing = store.quiz(quiz["slug"])
+        if existing and quiz["slug"] != body.get("replaces") and body.get("overwrite") is not True:
+            return jsonify(error=f"a quiz with the slug {quiz['slug']!r} already exists",
+                           conflict={"slug": existing["slug"], "title": existing["title"]}), 409
+        created = store.save_quiz(quiz)
+        return jsonify(slug=quiz["slug"], title=quiz["title"], created=created,
+                       start=url_for("new_game_players", slug=quiz["slug"]),
+                       edit=url_for("edit_quiz", slug=quiz["slug"])), 201 if created else 200
+
     # --- admin -------------------------------------------------------------
 
     @app.get("/admin")
@@ -961,7 +1006,7 @@ def create_app(db_path=None, password=None, media_dir=None, seed=None):
         q = store.quiz(slug)
         if q is None:
             return api_error(f"no quiz {slug!r}", 404)
-        return jsonify({k: q[k] for k in ("slug", "title", "players", "categories", "final") if k in q})
+        return jsonify(downloadable(q))
 
     @app.delete("/api/quizzes/<slug>")
     def api_delete_quiz(slug):

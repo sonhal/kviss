@@ -13,6 +13,7 @@
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='icon-180.png') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+  {% block scripts %}{% endblock %}
 </head>
 <body class="{% block body_class %}{% endblock %}">
 {% block content %}{% endblock %}

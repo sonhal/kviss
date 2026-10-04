@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}Lag kviss{% endblock %}
+{% block body_class %}page-admin{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='builder.js') }}" defer></script>{% endblock %}
+{% block content %}
+<header class="topbar">
+  <h1>Lag kviss</h1>
+  <nav>
+    <a class="tool" href="{{ url_for('new_game') }}">← Nytt spill</a>
+    <a class="tool" href="{{ url_for('home') }}" aria-label="Hjem">⌂</a>
+  </nav>
+</header>
+
+<main class="admin builder">
+  <noscript>
+    <section>
+      <p class="form-error">Kvissbyggeren trenger JavaScript. Du kan i stedet
+        <a class="gold" href="{{ url_for('upload_quiz') }}">laste opp en kviss-fil</a>.</p>
+    </section>
+  </noscript>
+  {% if source %}<script type="application/json" id="builder-source">{{ source|tojson }}</script>{% endif %}
+
+  <div id="builder" data-save-url="{{ url_for('save_built_quiz') }}" data-home-url="{{ url_for('build_quiz') }}" hidden>
+    <p class="form-error" id="builder-no-storage" role="alert" hidden>Nettleseren lar ikke kviss lagre utkast
+      (privat surfing?). Du kan bygge kvissen, men den blir borte hvis du lukker siden før du lagrer.</p>
+
+    {# --- the list of drafts and stored quizzes --- #}
+    <div id="builder-start" hidden>
+      <section>
+        <h2>Utkast</h2>
+        <p class="muted">Utkast lagres i denne nettleseren mens du skriver, og forsvinner når kvissen er lagret.</p>
+        <ul class="quiz-list" id="builder-drafts"></ul>
+        <p class="muted" id="builder-no-drafts">Ingen utkast.</p>
+        <p><button type="button" class="tool builder-new">＋ Ny kviss</button></p>
+      </section>
+
+      <section>
+        <h2>Rediger en lagret kviss</h2>
+        {% if quizzes %}
+        <ul class="quiz-list">
+          {% for q in quizzes %}
+          <li>
+            <a class="quiz-pick" href="{{ url_for('edit_quiz', slug=q.slug) }}">
+              <strong>{{ q.title }}</strong>
+              <span class="muted">{{ q.categories|length }} {{ "kategori" if q.categories|length == 1 else "kategorier" }} · {{ q.questions }} spørsmål
+                {%- if q.final %} · finale{% endif %}</span>
+            </a>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="muted">Ingen kviss er lagret ennå.</p>
+        {% endif %}
+        <p class="muted">Har du en kviss-fil? <a class="gold" href="{{ url_for('upload_quiz') }}">Last den opp</a>.</p>
+      </section>
+    </div>
+
+    {# --- the editor for one draft; builder.js fills in the categories --- #}
+    <form id="builder-editor" class="players-form builder-form" novalidate hidden>
+      <p class="builder-bar">
+        <button type="button" class="tool builder-back">← Alle utkast</button>
+        <span class="muted builder-status" aria-live="polite"></span>
+      </p>
+      <p class="muted builder-replaces" hidden></p>
+
+      <label for="b-title"><h2>Tittel</h2></label>
+      <input id="b-title" type="text" maxlength="100" data-path="title" autocomplete="off" placeholder="Fredagskviss">
+
+      <label for="b-players"><h2>Deltakere <span class="muted">(valgfritt)</span></h2></label>
+      <p class="muted">Ett lag eller én person per linje. Foreslås når du starter et spill, og kan endres da.</p>
+      <textarea id="b-players" rows="3" data-path="players"></textarea>
+
+      <h2>Kategorier</h2>
+      <p class="muted">Rundt 6 kategorier × 5 spørsmål passer best på en TV (maks 12 × 20). Skriv spørsmålet som et
+        hint, og hold svaret kort.</p>
+      <div class="builder-categories"></div>
+      <p><button type="button" class="tool builder-add-category">＋ Kategori</button></p>
+
+      <h2>Finale</h2>
+      <p class="muted">Et ekstra vanskelig spørsmål etter brettet, der lagene satser poeng (Final Jeopardy).</p>
+      <label class="builder-check"><input type="checkbox" data-path="finalOn"> Med finale</label>
+      <fieldset class="builder-final" data-loc="final">
+        <label>Kategori <input type="text" maxlength="100" data-path="final.category" autocomplete="off"></label>
+        <label>Spørsmål <textarea rows="2" maxlength="1000" data-path="final.question"></textarea></label>
+        <label>Svar <input type="text" maxlength="1000" data-path="final.answer" autocomplete="off"></label>
+      </fieldset>
+
+      <div class="builder-problems upload-failed" role="alert" hidden>
+        <strong>Kvissen ble ikke lagret:</strong>
+        <ul></ul>
+      </div>
+      <p class="builder-actions">
+        <button type="submit" class="start">Lagre kvissen</button>
+        <button type="button" class="tool builder-download">Last ned som fil</button>
+        <button type="button" class="tool bad builder-delete">Slett utkastet</button>
+      </p>
+    </form>
+
+    {# --- after saving --- #}
+    <section id="builder-saved" hidden>
+      <h2>Lagret</h2>
+      <ul class="quiz-list">
+        <li><a class="quiz-pick builder-start-game" href="#">
+          <strong class="builder-saved-title"></strong>
+          <span class="muted builder-saved-what"></span>
+          <span>Start et spill med denne →</span>
+        </a></li>
+      </ul>
+      <p><a class="tool builder-edit-again" href="#">Rediger kvissen igjen</a>
+        <a class="tool" href="{{ url_for('build_quiz') }}">Til utkastene</a></p>
+    </section>
+  </div>
+</main>
+{% endblock %}

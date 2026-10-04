@@ -37,10 +37,15 @@ AUDIO_TYPES = {".mp3", ".m4a", ".aac", ".wav"}  # formats both Safari and Chrome
 
 
 class ConfigError(ValueError):
-    """A quiz that can't be used. str() is every problem, one per line; .problems is the list."""
+    """A quiz that can't be used. str() is every problem, one per line; .problems is the list.
 
-    def __init__(self, problems):
+    .locations has the place in the quiz each problem is about, e.g. ["categories", 0, "questions", 1,
+    "answer"] (empty for the quiz as a whole), so the builder can mark the field.
+    """
+
+    def __init__(self, problems, locations=None):
         self.problems = [problems] if isinstance(problems, str) else list(problems)
+        self.locations = list(locations) if locations is not None else [[] for _ in self.problems]
         super().__init__("\n".join(self.problems))
 
 
@@ -231,7 +236,7 @@ def parse_quiz(data, media_dir):
     try:
         quiz = Quiz.model_validate(data, context={"media_dir": Path(media_dir)})
     except ValidationError as e:
-        raise ConfigError(quiz_problems(e, data)) from None
+        raise ConfigError(quiz_problems(e, data), [list(err["loc"]) for err in e.errors()]) from None
     return quiz.model_dump(exclude_none=True)
 
 
