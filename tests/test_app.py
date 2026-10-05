@@ -577,6 +577,108 @@ class KvissTest(unittest.TestCase):
         self.assertEqual(resp.status_code, 403)
         self.assertEqual(self.upload_files(("q.json", body), client=client, headers=auth).status_code, 200)
 
+    # --- the quiz builder (/lag) ---
+
+    def build(self, quiz, client=None, **body):
+        return (client or self.client).post("/lag", json={"quiz": quiz, **body})
+
+    def test_builder_page(self):
+        page = self.client.get("/lag").get_data(as_text=True)
+        self.assertIn('id="builder"', page)
+        self.assertIn("/static/builder.js", page)
+        self.assertIn('href="/lag/test"', page)  # stored quizzes can be opened for editing
+        self.assertNotIn('id="builder-source"', page)
+        self.assertNotIn("/static/builder.js", self.client.get("/nytt").get_data(as_text=True))
+        for path in ("/", "/nytt", "/admin", "/last-opp"):
+            self.assertIn('href="/lag"', self.client.get(path).get_data(as_text=True), path)
+
+    def test_builder_embeds_the_quiz_to_edit(self):
+        page = self.client.get("/lag/test").get_data(as_text=True)
+        start = page.index('<script type="application/json" id="builder-source">') + len(
+            '<script type="application/json" id="builder-source">')
+        source = json.loads(page[start:page.index("</script>", start)])
+        self.assertEqual(source, self.client.get("/api/quizzes/test").get_json())
+        self.assertNotIn("<script>x</script>", page)  # quiz text can't close the script tag
+        self.assertEqual(self.client.get("/lag/nope").status_code, 404)
+
+    def test_builder_saves_a_new_quiz(self):
+        resp = self.build({**QUIZ, "title": "Bygd kviss"}, replaces=None)
+        self.assertEqual(resp.status_code, 201)
+        self.assertEqual(resp.get_json(), {"slug": "bygd-kviss", "title": "Bygd kviss", "created": True,
+                                           "start": "/nytt/bygd-kviss", "edit": "/lag/bygd-kviss"})
+        self.assertEqual(self.client.get("/api/quizzes/bygd-kviss").get_json()["categories"], QUIZ["categories"])
+
+    def test_builder_edits_the_quiz_it_was_opened_from(self):
+        quiz = {**QUIZ, "slug": "test", "title": "Test, rettet"}
+        resp = self.build(quiz, replaces="test")
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(resp.get_json()["created"])
+        self.assertEqual(self.client.get("/api/quizzes/test").get_json()["title"], "Test, rettet")
+
+    def test_builder_asks_before_replacing_another_quiz(self):
+        resp = self.build({**QUIZ, "title": "Test"})  # a new draft that happens to get the slug "test"
+        self.assertEqual(resp.status_code, 409)
+        self.assertEqual(resp.get_json()["conflict"], {"slug": "test", "title": "Test"})
+        self.assertEqual(self.client.get("/api/quizzes/test").get_json()["players"], ["A", "B"])  # unchanged
+        resp = self.build({**QUIZ, "title": "Test", "players": ["C"]}, replaces="annen", overwrite=True)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(self.client.get("/api/quizzes/test").get_json()["players"], ["C"])
+
+    def test_builder_lists_problems_with_where_they_are(self):
+        quiz = {"title": "", "categories": [{"name": "Sport", "questions": [
+            {"value": None, "question": "Q", "answer": ""},
+            {"value": 100, "question": "Q", "answer": "A", "youtube": "dQw4w9WgXcQ", "start": 20, "end": 10},
+        ]}]}
+        resp = self.build(quiz)
+        self.assertEqual(resp.status_code, 400)
+        problems = {p["message"]: p["location"] for p in resp.get_json()["problems"]}
+        self.assertEqual(problems, {
+            "'title' must not be empty": ["title"],
+            "category 'Sport', question #1, 'value' must be a whole number": ["categories", 0, "questions", 0, "value"],
+            "category 'Sport', question #1, 'answer' must not be empty": ["categories", 0, "questions", 0, "answer"],
+            "category 'Sport', question #2: 'end' must be a number of seconds after 'start'":
+                ["categories", 0, "questions", 1],
+        })
+        self.assertEqual([q["slug"] for q in self.client.get("/api/quizzes").get_json()], ["test"])
+
+    def test_builder_rejects_bad_requests(self):
+        for body in (b"nope", b"[]", json.dumps({"quiz": QUIZ, "replaces": 3}).encode()):
+            resp = self.client.post("/lag", data=body, content_type="application/json")
+            self.assertEqual(resp.status_code, 400, body)
+        resp = self.client.post("/lag", json={})
+        self.assertEqual(resp.get_json()["problems"], [{"message": "top level must be an object", "location": []}])
+
+    def test_builder_plays_any_audio_file_in_the_media_folder(self):
+        (self.media / "80s").mkdir(parents=True)
+        (self.media / "80s" / "take on me.mp3").write_bytes(b"ID3 song")
+        (self.media / "notes.txt").write_text("secret")
+        (self.tmp / "outside.mp3").write_bytes(b"ID3 outside")
+        # Not in any quiz, so /media/ won't serve it, but the builder can test it before saving.
+        self.assertEqual(self.client.get("/media/80s/take%20on%20me.mp3").status_code, 404)
+        resp = self.client.get("/lag/lyd/80s/take%20on%20me.mp3")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data, b"ID3 song")
+        self.assertEqual(resp.mimetype, "audio/mpeg")
+        resp.close()
+        resp = self.client.get("/lag/lyd/80s/take%20on%20me.mp3", headers={"Range": "bytes=0-2"})
+        self.assertEqual((resp.status_code, resp.data), (206, b"ID3"))  # Safari needs ranges to play and seek
+        resp.close()
+        for path in ("/lag/lyd/notes.txt", "/lag/lyd/missing.mp3", "/lag/lyd/../outside.mp3",
+                     "/lag/lyd/%2e%2e/outside.mp3", "/lag/lyd/80s/..%2f..%2foutside.mp3"):
+            self.assertEqual(self.client.get(path).status_code, 404, path)
+        self.assertIn('data-audio-url="/lag/lyd/"', self.client.get("/lag").get_data(as_text=True))
+
+    def test_builder_needs_password_and_same_origin(self):
+        client = self.make_client(password="s3cret")
+        auth = {"Authorization": "Basic " + base64.b64encode(b":s3cret").decode()}
+        quiz = {"quiz": {**QUIZ, "title": "Hemmelig"}}
+        self.assertEqual(client.get("/lag").status_code, 401)
+        self.assertEqual(client.get("/lag/lyd/song.mp3").status_code, 401)
+        self.assertEqual(client.post("/lag", json=quiz).status_code, 401)
+        resp = client.post("/lag", json=quiz, headers={**auth, "Origin": "https://evil.example"})
+        self.assertEqual(resp.status_code, 403)
+        self.assertEqual(client.post("/lag", json=quiz, headers={**auth, "Origin": "http://localhost"}).status_code, 201)
+
     def test_api_needs_password(self):
         client = self.make_client(password="s3cret")
         self.assertEqual(client.get("/api/quizzes").status_code, 401)

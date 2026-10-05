@@ -30,7 +30,8 @@
     {% else %}
     <p>Ingen kviss er lagt inn ennå.</p>
     {% endif %}
-    <p><a class="tool" href="{{ url_for('upload_quiz') }}">＋ Last opp en kviss</a></p>
+    <p><a class="tool" href="{{ url_for('build_quiz') }}">＋ Lag en kviss</a>
+      <a class="tool" href="{{ url_for('upload_quiz') }}">＋ Last opp en kviss</a></p>
   </section>
 </main>
 {% endblock %}

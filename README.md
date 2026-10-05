@@ -6,8 +6,9 @@ Everything still works if that script fails to load.
 The screens are in Norwegian (bokmål); code, config keys and docs are in English.
 
 Quizzes are stored in a SQLite database (`kviss.db`) and can be played again and again with different players.
-You add quizzes by uploading JSON files on **Last opp kviss** (`/last-opp`) or through the API (see
-[Managing quizzes](#managing-quizzes)), and pick one on **Nytt spill** before each game.
+You add quizzes by writing them on **Lag kviss** (`/lag`), by uploading JSON files on **Last opp kviss**
+(`/last-opp`), or through the API (see [Managing quizzes](#managing-quizzes)), and pick one on **Nytt spill** before
+each game.
 
 - **Landing page** (`/`, where the home-screen icon opens): the game on the TV right now, with its standings and a
   **Fortsett** button back to the board, a **Nytt spill** button, and **Tidligere spill**, the last 50 finished
@@ -18,6 +19,8 @@ You add quizzes by uploading JSON files on **Last opp kviss** (`/last-opp`) or t
   many times each quiz has been played and when. Starting a game ends the one on the TV. If that game was
   half-way through you have to tick a box first. A game where nothing was scored is just dropped. The others are
   kept in the history. When the podium is showing, the top bar gets a **Nytt spill** button.
+- **Lag kviss** (`/lag`, linked from the landing page, **Nytt spill**, upload and admin): write a quiz in the
+  browser, or open a stored one to change it. See [Building a quiz in the browser](#building-a-quiz-in-the-browser).
 - **Last opp kviss** (`/last-opp`, linked from the landing page, **Nytt spill** and admin): upload one or more quiz
   JSON files from the browser. The page explains the format in Norwegian, with a downloadable template
   (`static/kviss-mal.json`) and a prompt for making questions with an AI. Each file is checked like an API upload:
@@ -98,6 +101,32 @@ Sport, Musikk, Underholdning, Godt og Blandet). After that, the database is the 
 Each quiz has a **slug**, a short name like `fredagskviss`. It is made from the title (`"Fredagskviss på Bærum"`
 → `fredagskviss-pa-baerum`), or you can set it yourself with a `"slug"` field. **Uploading a quiz with a slug that
 already exists replaces it.** That is how you fix a typo. To keep both, give the new one another title or slug.
+
+### Building a quiz in the browser
+
+Open **Lag kviss** (`/lag`). **＋ Ny kviss** starts an empty quiz with one category of five questions (100–500);
+the list under it opens a stored quiz for editing. The form covers everything in [the quiz format](#the-quiz-format):
+title, players, categories and questions (add, delete and move them with ↑ ↓ ✕), music under **♪ Musikk** per
+question, and the final question. A pasted YouTube link is turned into the video ID, and `start`/`end` can be typed
+as seconds (`75`) or minutes (`1:15`).
+
+- **Drafts are kept in the browser**, in `localStorage`, saved a moment after every keystroke. Closing the tab or
+  reloading the phone keeps them, and the page lists them under **Utkast**. They are only in that browser: another
+  device or a private window doesn't see them, and clearing site data deletes them. If the browser blocks storage
+  (some private modes), the page says so, and the quiz is lost if the page is closed before it is saved.
+- **Lagre kvissen** sends the quiz to the server (`POST /lag`), which checks it exactly like an upload. Problems
+  are listed, and the field each one is about is outlined; tap a problem to jump to it. A saved quiz links straight
+  to starting a game, and its draft is deleted, since the server has it now.
+- **Editing a stored quiz** (`/lag/<slug>`) makes a draft from it that keeps its slug, so saving replaces it. Coming
+  back later continues that draft, with a button to throw it away and start again from the stored version.
+- **A new quiz never replaces another one by accident.** If its title gives a slug that is already taken, the page
+  asks before replacing that quiz.
+- **▶ Test** under **♪ Musikk** plays the clip as the question screen will: from Start, stopping by itself at Slutt
+  (or at the end of the song), with the time shown while it plays. **■ Stopp** stops it, and only one clip plays at a
+  time. A YouTube clip plays in the same invisible player as in the game, so a video whose owner blocks playing it
+  outside YouTube says so here, before game night. An audio file must already be in the media folder on the server.
+- **Last ned som fil** downloads the draft as quiz JSON, for a backup or for **Last opp kviss** on another server.
+- The builder needs JavaScript; without it, the page points to **Last opp kviss**.
 
 ### Uploading from the browser
 
@@ -503,17 +532,23 @@ and `KVISS_VERSION` (the version in the start page's footer; by default `git des
   Without HTTPS, the Basic Auth password would travel in plain text.
 - POSTs whose `Origin` header points at a different site are rejected, which blocks cross-site form
   attacks (CSRF) from other pages open in the same browser.
-- The quiz API and the upload page need the password like every other page. Request bodies over 1 MB are refused (`413`). Further
+- The quiz API, the upload page and the quiz builder need the password like every other page. Request bodies over 1 MB are refused (`413`). Further
   protection of `/api/` (rate limits, IP allow-lists) belongs in the Caddy config in front of the app.
 - All input is parsed by Pydantic models in `schemas.py` before the app uses it. An upload is checked in full
   before anything is written. Quiz JSON is checked strictly (no type coercion, no unknown fields, no
   `NaN`/`Infinity`, size limits). Every form post is checked too (player index, score change, verdict, redirect
   target); a value the pages never send gets a `400`.
 - The database is only reached through parameterised SQL queries, so quiz text can't alter a query.
-- All quiz text goes through Jinja's auto-escaping, so HTML in a question cannot inject scripts.
+- All quiz text goes through Jinja's auto-escaping, so HTML in a question cannot inject scripts. The quiz builder
+  only puts text into the page as text (`textContent` and input values, never `innerHTML`), and the stored quiz it
+  edits is embedded with Jinja's `tojson`, which escapes `<`, `>` and `&` so a question can't end the script tag.
+- Builder drafts are stored unencrypted in the browser's `localStorage`, outside the password. Anyone who can use
+  that browser profile can read them, so on a shared computer, save or delete drafts when you're done.
 - A `youtube` value must be exactly an 11-character ID (`A-Z a-z 0-9 _ -`), so the quiz file can't point the
   player at anything else. `/media/` serves only the audio files the current game's quiz names, from inside the `media/`
-  folder, and is behind the same password as everything else.
+  folder, and is behind the same password as everything else. The builder's **▶ Test** uses `/lag/lyd/`, which serves
+  any audio file (`.mp3`, `.m4a`, `.aac`, `.wav`) in `media/`, so a clip can be heard before the quiz is saved. It is
+  behind the password too, refuses other file types, and can't reach outside the folder.
 - The systemd unit runs as an unprivileged user with a read-only filesystem except for `/opt/kviss`.
 - The app deliberately runs a **single** gunicorn worker. The current game is also held in memory in that one
   process, along with the question the TV shows for the host view, so do not raise `--workers`.
@@ -531,5 +566,4 @@ and `KVISS_VERSION` (the version in the start page's footer; by default `git des
 ## Ideas for after the MVP
 
 - Daily Doubles and a Final Jeopardy round with wagers.
-- A quiz editor in the browser instead of uploading JSON.
 - Sound effects and a countdown timer.
