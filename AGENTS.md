@@ -6,7 +6,7 @@
 - **Commit subjects and PR titles are Conventional Commits.** PRs are
   squash-merged, so the PR title becomes the commit subject on `main`, and
   that subject alone decides whether CI cuts a release
-  (`scripts/next-version.sh`, see "CI and releases" in `README.md`):
+  (`scripts/next-version.sh`, see `docs/ci-and-releases.md`):
 
   | Subject prefix | Release it cuts |
   |---|---|
