@@ -1,6 +1,6 @@
 # docker compose up -d --build
 # The database and audio files live in the named volume "kviss-data", mounted at /data.
-# To use a folder on the host instead, see "Run with Docker" in README.md.
+# To use a folder on the host instead, see "Keeping the data in a folder on the host" in docs/deploy.md.
 services:
   kviss:
     build: .

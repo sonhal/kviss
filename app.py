@@ -1058,7 +1058,7 @@ def main(argv):
     if argv:
         print("usage: python app.py [import QUIZ.json ...]", file=sys.stderr)
         return 2
-    # Local development only; use gunicorn in production (see README).
+    # Local development only; use gunicorn in production (see docs/deploy.md).
     create_app().run(host=os.environ.get("HOST", "127.0.0.1"), port=int(os.environ.get("PORT", "8000")), debug=True)
     return 0
 
