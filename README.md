@@ -45,10 +45,11 @@ each game.
 - **Finale** (Final Jeopardy, for quizzes with a [`final`](#the-quiz-format) question): tick **Med finale** on
   **Nytt spill** and set the countdown (30 seconds by default; the next game suggests the time you used last).
   For a quiz without a final question the box is greyed out, and the quiz list marks the quizzes that have one. When the board is empty, the TV shows the final's category instead of the podium, and which teams
-  play: everyone above 0 points. Teams write their bet (0 up to their whole score) and their answer on paper.
-  **Vis spørsmålet** shows the question with the countdown, and teams write their answer and turn the paper face
-  down. **Skriv inn innsatsene** then lets the host type in every team's bet (checked against its score), and only
-  then does **Vis svaret** show the correct answer, so nobody can change their paper after seeing it. Each team
+  play: everyone above 0 points. Teams write their bet (0 up to their whole score) on paper. **Skriv inn
+  innsatsene** lets the host type in every team's bet (checked against its score) while the TV still shows only
+  the category, so nobody can change their bet after seeing the question. Only then does **Vis spørsmålet** show
+  the question with the countdown, and teams write their answer and turn the paper face down. **Vis svaret** shows
+  the correct answer. Each team
   turns its paper and the host taps ✓ (adds the bet) or ✗ (subtracts it), in any order; the teams are listed
   lowest score first, so the leader comes last. Every result stays on the TV until **Se sluttresultat** goes on to
   the podium. If nobody is above 0, the final is skipped. The countdown carries on if the page is reloaded, the host

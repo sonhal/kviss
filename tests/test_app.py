@@ -916,28 +916,32 @@ class KvissTest(unittest.TestCase):
         self.assertIn('<li class="out"><span class="player-name">C</span>', page)
         self.assertIn("Fortsett", self.client.get("/").get_data(as_text=True))
         self.assertIn("1905", self.client.get("/vert").get_data(as_text=True))  # the host sees the answer
-        # 2. The question and the countdown.
-        self.client.post("/finale/sporsmal")
-        self.assertEqual(self.game.state["final"]["order"], [1, 0])  # lowest score first
-        page = self.client.get("/brett").get_data(as_text=True)
-        self.assertIn("selvstendig", page)
-        self.assertIn('data-seconds="30" data-left="30"', page)
-        self.assertNotIn("1905", page)
-        # 3. Every bet is typed in before the answer is shown.
+        # 2. Every bet is typed in before the question is shown, so nobody can change theirs after seeing it.
         self.client.post("/finale/innsats")
+        self.assertEqual(self.game.state["final"]["order"], [1, 0])  # lowest score first
         page = self.client.get("/brett").get_data(as_text=True)
         self.assertIn('name="wager-1"', page)
         self.assertIn('name="wager-0"', page)
         self.assertNotIn('name="wager-2"', page)  # C is out
-        self.assertNotIn("1905", page)
+        self.assertNotIn("selvstendig", page)
+        self.client.post("/finale/vis-svar")  # no skipping past the question
+        self.assertEqual(self.game.final_phase(), "bets")
         for bets, message in [({"wager-1": "100"}, "A kan ha satset fra 0 til 200"),
                               ({"wager-1": "101", "wager-0": "200"}, "B kan ha satset fra 0 til 100"),
                               ({"wager-1": "x", "wager-0": "200"}, "B kan ha satset")]:
-            resp = self.client.post("/finale/vis-svar", data=bets)
+            resp = self.client.post("/finale/sporsmal", data=bets)
             self.assertEqual(resp.status_code, 400, bets)
             self.assertIn(message, resp.get_data(as_text=True))
+            self.assertNotIn("selvstendig", resp.get_data(as_text=True))
         self.assertEqual(self.game.final_phase(), "bets")
-        self.client.post("/finale/vis-svar", data={"wager-1": "100", "wager-0": "200"})
+        self.client.post("/finale/sporsmal", data={"wager-1": "100", "wager-0": "200"})
+        # 3. The question and the countdown, which starts now.
+        page = self.client.get("/brett").get_data(as_text=True)
+        self.assertIn("selvstendig", page)
+        self.assertIn('data-seconds="30" data-left="30"', page)
+        self.assertNotIn("1905", page)
+        self.assertIn("B: satset 100", self.client.get("/vert").get_data(as_text=True))
+        self.client.post("/finale/vis-svar")
         # 4. The answer, then each team right or wrong, in any order.
         page = self.client.get("/brett").get_data(as_text=True)
         self.assertIn("1905", page)
@@ -969,7 +973,10 @@ class KvissTest(unittest.TestCase):
         self.assertEqual(self.game.state["scores"], [0, 100, -100])
         self.client.post("/undo", data={"next": "board"})
         self.client.post("/undo", data={"next": "board"})
+        self.assertEqual(self.game.final_phase(), "question")
+        self.client.post("/undo", data={"next": "board"})
         self.assertEqual(self.game.final_phase(), "bets")
+        self.assertEqual(self.game.state["final"]["wagers"], {})
 
     def test_final_is_skipped_when_nobody_is_above_zero(self):
         self.start_with_final()
@@ -977,14 +984,15 @@ class KvissTest(unittest.TestCase):
         for c, r in [(0, 0), (0, 1), (1, 0)]:
             self.judge(c, r, "nobody")
         self.assertIn("finalen spilles ikke", self.client.get("/brett").get_data(as_text=True))
-        self.client.post("/finale/sporsmal")
+        self.client.post("/finale/innsats")
         self.assertTrue(self.game.is_over())
         self.assertIn("Sluttresultat", self.client.get("/brett").get_data(as_text=True))
 
     def test_final_countdown_carries_on_after_reload(self):
         self.start_with_final()
         self.play_board()
-        self.client.post("/finale/sporsmal")
+        self.client.post("/finale/innsats")
+        self.client.post("/finale/sporsmal", data={"wager-1": "0", "wager-0": "0"})
         final = self.game.state["final"]
         final["question_at"] = "2000-01-01T00:00:00+00:00"
         self.assertEqual(self.game.final_seconds_left(), 0)
@@ -992,9 +1000,9 @@ class KvissTest(unittest.TestCase):
 
     def test_final_steps_out_of_order_do_nothing(self):
         self.start_with_final()
-        self.client.post("/finale/sporsmal")  # the board isn't empty yet
-        self.client.post("/finale/innsats")
-        self.client.post("/finale/vis-svar", data={"wager-0": "0"})
+        self.client.post("/finale/innsats")  # the board isn't empty yet
+        self.client.post("/finale/sporsmal", data={"wager-0": "0"})
+        self.client.post("/finale/vis-svar")
         self.assertEqual(self.game.final_phase(), "category")
         self.assertIn('class="board"', self.client.get("/brett").get_data(as_text=True))
         self.assertEqual(self.client.post("/finale/svar", data={"player": "0", "result": "maybe"}).status_code, 400)

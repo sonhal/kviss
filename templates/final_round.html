@@ -23,32 +23,19 @@
       {% if p in playing %}maks {{ game.state.scores[p] }}{% else %}ute{% endif %}</li>
     {% endfor %}
   </ul>
-  <form method="post" action="{{ url_for('final_question') }}">
-    <button class="dd-go">Vis spørsmålet</button>
+  <form method="post" action="{{ url_for('final_bets') }}">
+    <button class="dd-go">Skriv inn innsatsene</button>
   </form>
   {% else %}
   <p class="finale-help">Ingen har over 0 poeng, så finalen spilles ikke.</p>
-  <form method="post" action="{{ url_for('final_question') }}">
+  <form method="post" action="{{ url_for('final_bets') }}">
     <button class="dd-go">Til resultatet</button>
   </form>
   {% endif %}
 
-  {% elif phase == "question" %}
-  <p class="clue-text">{{ quiz.final.question }}</p>
-  {% set left = game.final_seconds_left() %}
-  <div class="countdown{% if not left %} over{% endif %}" data-seconds="{{ final.seconds }}" data-left="{{ left }}">
-    <span class="countdown-number">{% if left %}{{ left }}{% else %}Tiden er ute!{% endif %}</span>
-    <div class="countdown-bar"><span style="width: {{ (100 * left / final.seconds)|round(1) }}%"></span></div>
-  </div>
-  <p class="finale-help">Skriv svaret på lappen og legg den med forsiden ned.</p>
-  <form method="post" action="{{ url_for('final_bets') }}">
-    <button class="dd-go">Skriv inn innsatsene</button>
-  </form>
-
   {% elif phase == "bets" %}
-  <p class="finale-question">{{ quiz.final.question }}</p>
-  <form method="post" action="{{ url_for('final_answer') }}" class="finale-bets">
-    <p class="finale-help">Skriv inn innsatsen fra hver lapp. Svaret vises når alle er skrevet inn.</p>
+  <form method="post" action="{{ url_for('final_question') }}" class="finale-bets">
+    <p class="finale-help">Skriv inn innsatsen fra hver lapp. Spørsmålet vises når alle er skrevet inn.</p>
     <div class="finale-teams">
       {% for p in final.order %}
       <label class="finale-bet"><span class="player-name">{{ quiz.players[p] }}</span>
@@ -58,6 +45,18 @@
       {% endfor %}
     </div>
     {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+    <button class="dd-go">Vis spørsmålet</button>
+  </form>
+
+  {% elif phase == "question" %}
+  <p class="clue-text">{{ quiz.final.question }}</p>
+  {% set left = game.final_seconds_left() %}
+  <div class="countdown{% if not left %} over{% endif %}" data-seconds="{{ final.seconds }}" data-left="{{ left }}">
+    <span class="countdown-number">{% if left %}{{ left }}{% else %}Tiden er ute!{% endif %}</span>
+    <div class="countdown-bar"><span style="width: {{ (100 * left / final.seconds)|round(1) }}%"></span></div>
+  </div>
+  <p class="finale-help">Skriv svaret på lappen og legg den med forsiden ned.</p>
+  <form method="post" action="{{ url_for('final_answer') }}">
     <button class="dd-go">Vis svaret</button>
   </form>
 

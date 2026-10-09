@@ -34,8 +34,8 @@
   <p class="host-answer">{{ quiz.final.answer }}</p>
   <p class="host-progress">
     {%- if final.phase == "category" %}Kategorien vises. Lagene skriver ned innsatsen.
-    {%- elif final.phase == "question" %}Spørsmålet vises ({{ final.seconds }} sekunder).
     {%- elif final.phase == "bets" %}Innsatsene skrives inn.
+    {%- elif final.phase == "question" %}Spørsmålet vises ({{ final.seconds }} sekunder).
     {%- else %}Svaret vises. Marker hvert lag riktig eller feil.{% endif %}</p>
   {% if final.wagers %}
   <ul class="host-final">
