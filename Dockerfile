@@ -1,6 +1,6 @@
 # Kviss as a container. All state lives in /data: the SQLite database (kviss.db plus its
 # -wal/-shm files) and the media/ folder with audio for music questions. Mount a volume there.
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
