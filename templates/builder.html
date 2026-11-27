@@ -21,7 +21,8 @@
   {% if source %}<script type="application/json" id="builder-source">{{ source|tojson }}</script>{% endif %}
 
   <div id="builder" data-save-url="{{ url_for('save_built_quiz') }}" data-home-url="{{ url_for('build_quiz') }}"
-       data-audio-url="{{ url_for('build_quiz') }}/lyd/" hidden>
+       data-audio-url="{{ url_for('build_quiz') }}/lyd/" data-upload-url="{{ url_for('upload_audio') }}"
+       data-audio-max-mb="{{ audio_max_mb }}" hidden>
     <p class="form-error" id="builder-no-storage" role="alert" hidden>Nettleseren lar ikke kviss lagre utkast
       (privat surfing?). Du kan bygge kvissen, men den blir borte hvis du lukker siden før du lagrer.</p>
 
@@ -52,7 +53,8 @@
         {% else %}
         <p class="muted">Ingen kviss er lagret ennå.</p>
         {% endif %}
-        <p class="muted">Har du en kviss-fil? <a class="gold" href="{{ url_for('upload_quiz') }}">Last den opp</a>.</p>
+        <p class="muted">Har du en kviss-fil? <a class="gold" href="{{ url_for('upload_quiz') }}">Last den opp</a>.
+          Sanger til musikkspørsmål finner du under <a class="gold" href="{{ url_for('media_list') }}">Lydfiler</a>.</p>
       </section>
     </div>
 

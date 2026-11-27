@@ -18,6 +18,7 @@ import math
 import mimetypes
 import os
 import secrets
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -32,11 +33,16 @@ from flask import (Flask, Response, abort, jsonify, redirect, render_template, r
                    url_for)
 from werkzeug.exceptions import RequestEntityTooLarge
 
+import audio
+from audio import MAX_AUDIO_MB, MAX_AUDIO_UPLOAD, AudioError, AudioTooLarge, audio_files, save_upload, size_text
 from schemas import (AUDIO_TYPES, FINAL_SECONDS, MIN_WAGER, AdjustForm, ConfigError, ConfirmForm, FinalJudgeForm,
                      FormError, JudgeForm, NewGameForm, UndoForm, WagerForm, parse_form, parse_quiz)
 
 BASE_DIR = Path(__file__).resolve().parent
 mimetypes.add_type("application/manifest+json", ".webmanifest")
+# Audio for music questions, in case the system's MIME table lacks one (Safari wants the right type).
+for _type, _ext in (("audio/mpeg", ".mp3"), ("audio/mp4", ".m4a"), ("audio/aac", ".aac"), ("audio/wav", ".wav")):
+    mimetypes.add_type(_type, _ext)
 UNDO_LIMIT = 50
 MAX_UPLOAD = 1024 * 1024  # bytes; a big quiz is well under 100 kB
 
@@ -64,6 +70,18 @@ def default_db():
 
 def default_media():
     return _env_path("KVISS_MEDIA", BASE_DIR / "media")
+
+
+def default_media_max_mb():
+    """KVISS_MEDIA_MAX_MB: how many MB of audio files uploads may fill the media folder with. None: no limit.
+    A bad value stops the app from starting (gunicorn: "Worker failed to boot") rather than quietly allowing
+    any amount; ValueError, not SystemExit, which gunicorn would answer by restarting the worker forever."""
+    value = os.environ.get("KVISS_MEDIA_MAX_MB", "").strip()
+    if not value:
+        return None
+    if not value.isdigit() or int(value) < 1:
+        raise ValueError(f"KVISS_MEDIA_MAX_MB must be a whole number of megabytes, got {value!r}")
+    return int(value)
 
 
 def now():
@@ -235,6 +253,22 @@ class Store:
         """Earlier games keep their own copy of the quiz, so they survive this."""
         with self._db() as db:
             return db.execute("DELETE FROM quizzes WHERE slug = ?", (slug,)).rowcount > 0
+
+    def rename_audio(self, old, new):
+        """Point every stored quiz's music questions at the audio file `new` instead of `old`, in one
+        transaction. Games keep their own copy of the quiz and are not changed. Returns the titles changed."""
+        changed = []
+        with self._db() as db:
+            for row in db.execute("SELECT id, title, data FROM quizzes").fetchall():
+                data = json.loads(row["data"])
+                questions = [q for c in data["categories"] for q in c["questions"] if q.get("audio") == old]
+                for q in questions:
+                    q["audio"] = new
+                if questions:
+                    db.execute("UPDATE quizzes SET data = ?, updated_at = ? WHERE id = ?",
+                               (json.dumps(data, ensure_ascii=False), now(), row["id"]))
+                    changed.append(row["title"])
+        return changed
 
     def is_empty(self):
         with self._db() as db:
@@ -613,10 +647,13 @@ class Kviss:
 # --- web app ------------------------------------------------------------------
 
 
-def create_app(db_path=None, password=None, media_dir=None, seed=None):
-    """seed: quiz files to import when the database has no quizzes yet (first start)."""
+def create_app(db_path=None, password=None, media_dir=None, seed=None, media_max_mb=None):
+    """seed: quiz files to import when the database has no quizzes yet (first start).
+    media_max_mb: the limit for uploaded audio (default: KVISS_MEDIA_MAX_MB, else none)."""
     db_path = db_path or default_db()
     media_dir = Path(media_dir or default_media())
+    media_max_mb = media_max_mb or default_media_max_mb()
+    media_max = media_max_mb * 1024 * 1024 if media_max_mb else None
     password = password if password is not None else os.environ.get("KVISS_PASSWORD", "")
     if seed is None:
         seed = [_env_path("KVISS_CONFIG", BASE_DIR / "quiz.json"), BASE_DIR / "quiz-example.json"]
@@ -923,14 +960,14 @@ def create_app(db_path=None, password=None, media_dir=None, seed=None):
 
     @app.get("/lag")
     def build_quiz():
-        return render_template("builder.html", quizzes=store.quizzes(), source=None)
+        return render_template("builder.html", quizzes=store.quizzes(), source=None, audio_max_mb=MAX_AUDIO_MB)
 
     @app.get("/lag/<slug>")
     def edit_quiz(slug):
         q = store.quiz(slug)
         if q is None:
             abort(404)
-        return render_template("builder.html", quizzes=store.quizzes(), source=downloadable(q))
+        return render_template("builder.html", quizzes=store.quizzes(), source=downloadable(q), audio_max_mb=MAX_AUDIO_MB)
 
     @app.get("/lag/lyd/<path:name>")
     def preview_audio(name):
@@ -939,6 +976,150 @@ def create_app(db_path=None, password=None, media_dir=None, seed=None):
         if Path(name).suffix.lower() not in AUDIO_TYPES:
             abort(404)
         return send_from_directory(kviss.media_dir, name)
+
+    @app.post("/lag/lyd")
+    def upload_audio():
+        """One audio file (form field "file") from the builder's upload button, saved in the media folder.
+
+        201 {"file": name for the quiz's "audio" field, "format", "reused": false}, or 200 with reused true when
+        the same file is already there. 400/413 {"error": message for the user}. Only this route accepts
+        bodies over 1 MB; the file's format is checked from its contents (audio.py).
+        """
+        request.max_content_length = MAX_AUDIO_UPLOAD + 64 * 1024  # room for the multipart headers
+        try:
+            upload = request.files.get("file")
+        except RequestEntityTooLarge:
+            return jsonify(error=str(AudioTooLarge(MAX_AUDIO_UPLOAD))), 413
+        if upload is None or not upload.filename:
+            return jsonify(error="Velg en lydfil."), 400
+        try:
+            name, fmt, reused = save_upload(upload.stream, upload.filename, kviss.media_dir, MAX_AUDIO_UPLOAD,
+                                            media_max)
+        except AudioError as e:
+            return jsonify(error=str(e)), 413 if isinstance(e, AudioTooLarge) else 400
+        return jsonify(file=name, format=fmt.label, reused=reused), 200 if reused else 201
+
+    # --- the audio files in the media folder -------------------------------------
+    # /lydfiler lists them with the quizzes that use them, and uploads, renames and deletes them. A file the
+    # game on the TV plays can't be renamed or deleted (the game has its own copy of the quiz), and one a
+    # stored quiz uses can't be deleted; renaming it updates those quizzes. kviss.lock keeps a game from
+    # starting halfway through.
+
+    def media_files():
+        """Every audio file, with its size, date and what uses it, and the totals for the page."""
+        used_by = {}
+        for q in store.quizzes():
+            for name in {question["audio"] for c in q["categories"] for question in c["questions"]
+                         if question.get("audio")}:
+                used_by.setdefault(name, []).append(q)
+        on_tv = kviss.game.audio_files if kviss.game else set()
+        files = []
+        for name in audio_files(kviss.media_dir):
+            stat = (kviss.media_dir / name).stat()
+            files.append({"name": name, "stem": Path(name).stem, "size": stat.st_size,
+                          "modified": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
+                          "quizzes": used_by.get(name, []), "on_tv": name in on_tv})
+        for f in files:
+            f["unused"] = not f["quizzes"] and not f["on_tv"]
+        total = sum(f["size"] for f in files)
+        try:
+            free = shutil.disk_usage(kviss.media_dir if kviss.media_dir.is_dir() else kviss.media_dir.parent).free
+        except OSError:
+            free = None
+        return files, {"total": total, "free": free, "max": media_max}
+
+    def media_page(status=200, **ctx):
+        files, usage = media_files()
+        return render_template("media.html", files=files, usage=usage, audio_max_mb=MAX_AUDIO_MB,
+                               size_text=size_text, **ctx), status
+
+    def media_file(files, name):
+        """The listed file with this name, or None: only names from the listing are acted on, so a hand-made
+        request can't point outside the folder or at another kind of file."""
+        return next((f for f in files if f["name"] == name), None)
+
+    @app.get("/lydfiler")
+    def media_list():
+        return media_page()
+
+    @app.post("/lydfiler")
+    def media_upload():
+        """Upload without JavaScript: one or more files in one request (the page's script sends them one at
+        a time to /lag/lyd instead, with progress)."""
+        request.max_content_length = MAX_AUDIO_UPLOAD + 64 * 1024
+        try:
+            uploads = [f for f in request.files.getlist("files") if f.filename]
+        except RequestEntityTooLarge:
+            return media_page(413, error=f"Filene er for store til sammen (maks {MAX_AUDIO_MB} MB om gangen uten "
+                                         "JavaScript). Last opp én og én.")
+        if not uploads:
+            return media_page(400, error="Velg minst én lydfil.")
+        results = []
+        for upload in uploads:
+            try:
+                name, fmt, reused = save_upload(upload.stream, upload.filename, kviss.media_dir, MAX_AUDIO_UPLOAD,
+                                                media_max)
+                results.append({"file": upload.filename, "name": name, "format": fmt.label, "reused": reused})
+            except AudioError as e:
+                results.append({"file": upload.filename, "error": str(e)})
+        return media_page(400 if all("error" in r for r in results) else 200, results=results)
+
+    @app.post("/lydfiler/slett")
+    def media_delete():
+        with kviss.lock:
+            files, _ = media_files()
+            f = media_file(files, request.form.get("name", ""))
+            if f is None:
+                return media_page(404, error="Fant ikke den lydfilen. Er den allerede slettet?")
+            if not f["unused"]:
+                return media_page(409, error=f"«{f['name']}» er i bruk og kan ikke slettes.")
+            (kviss.media_dir / f["name"]).unlink(missing_ok=True)
+        return media_page(notice=f"Slettet «{f['name']}».")
+
+    @app.post("/lydfiler/nytt-navn")
+    def media_rename():
+        new_name = request.form.get("new_name", "")[:200]
+        with kviss.lock:
+            files, _ = media_files()
+            f = media_file(files, request.form.get("name", ""))
+            if f is None:
+                return media_page(404, error="Fant ikke den lydfilen. Er den slettet eller har fått nytt navn?")
+            if f["on_tv"]:
+                return media_page(409, error=f"«{f['name']}» brukes i spillet på TV-en nå, og kan ikke få nytt navn "
+                                             "før et nytt spill er startet.")
+            try:
+                new = audio.rename(kviss.media_dir, f["name"], new_name)
+            except AudioError as e:
+                return media_page(400, error=str(e))
+            if new == f["name"]:
+                return media_page(notice=f"«{new}» har allerede det navnet.")
+            try:
+                changed = store.rename_audio(f["name"], new)
+            except Exception:
+                os.replace(kviss.media_dir / new, kviss.media_dir / f["name"])  # keep file and quizzes in step
+                raise
+        updated = f" Oppdaterte {', '.join(changed)}." if changed else ""
+        return media_page(notice=f"«{f['name']}» heter nå «{new}».{updated}")
+
+    @app.post("/lydfiler/rydd")
+    def media_clean():
+        """Delete the files no quiz uses. First post: the page asks, listing them. With confirm=yes: deletes
+        the files it listed that are still unused (a file put to use in the meantime is kept)."""
+        with kviss.lock:
+            files, _ = media_files()
+            unused = [f for f in files if f["unused"]]
+            if request.form.get("confirm") != "yes":
+                if not unused:
+                    return media_page(notice="Alle lydfilene er i bruk. Ingenting å rydde.")
+                return media_page(clean=unused)
+            chosen = set(request.form.getlist("names"))
+            deleted = [f for f in unused if f["name"] in chosen]
+            for f in deleted:
+                (kviss.media_dir / f["name"]).unlink(missing_ok=True)
+        if not deleted:
+            return media_page(notice="Ingen filer ble slettet.")
+        size = size_text(sum(f["size"] for f in deleted))
+        return media_page(notice=f"Slettet {len(deleted)} {'fil' if len(deleted) == 1 else 'filer'} ({size}).")
 
     @app.post("/lag")
     def save_built_quiz():

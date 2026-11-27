@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}Lydfiler{% endblock %}
+{% block body_class %}page-admin{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='media.js') }}" defer></script>{% endblock %}
+{% block content %}
+<header class="topbar">
+  <h1>Lydfiler</h1>
+  <nav>
+    <a class="tool" href="{{ url_for('admin') }}">← Admin</a>
+    <a class="tool" href="{{ url_for('home') }}" aria-label="Hjem">⌂</a>
+  </nav>
+</header>
+
+<main class="admin media">
+  {% if notice %}<p class="media-notice" role="status">{{ notice }}</p>{% endif %}
+  {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+
+  {% if results %}
+  <section aria-live="polite">
+    <h2>Opplastet</h2>
+    <ul class="media-results">
+      {% for r in results %}
+      {% if r.error %}<li class="upload-failed"><strong>✗ {{ r.file }}</strong> {{ r.error }}</li>
+      {% else %}<li>✓ {{ r.file }} → <strong class="gold">{{ r.name }}</strong>
+        <span class="muted">({{ r.format }}{% if r.reused %}, fantes fra før{% endif %})</span></li>{% endif %}
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if clean %}
+  <section class="media-clean" aria-live="polite">
+    <h2>Slette ubrukte filer?</h2>
+    <p>Ingen lagret kviss bruker disse {{ clean|length }} filene ({{ size_text(clean|sum(attribute='size')) }}),
+      og de spilles ikke på TV-en nå. Avsluttede spill trenger dem ikke.</p>
+    <form method="post" action="{{ url_for('media_clean') }}">
+      <input type="hidden" name="confirm" value="yes">
+      <ul>
+        {% for f in clean %}<li><input type="hidden" name="names" value="{{ f.name }}">{{ f.name }}
+          <span class="muted">{{ size_text(f.size) }}</span></li>{% endfor %}
+      </ul>
+      <button class="tool bad">Slett {{ clean|length }} {{ "fil" if clean|length == 1 else "filer" }}</button>
+      <a class="tool" href="{{ url_for('media_list') }}">Avbryt</a>
+    </form>
+  </section>
+  {% endif %}
+
+  <section>
+    <h2>Last opp</h2>
+    <form method="post" action="{{ url_for('media_upload') }}" enctype="multipart/form-data"
+          class="players-form upload-form" id="media-upload" data-upload-url="{{ url_for('upload_audio') }}"
+          data-list-url="{{ url_for('media_list') }}"
+          data-max-mb="{{ audio_max_mb }}">
+      <label for="media-files-input">Velg én eller flere lydfiler: MP3, M4A/MP4 (AAC), AAC eller WAV, maks
+        {{ audio_max_mb }} MB per fil.</label>
+      <input id="media-files-input" name="files" type="file" accept="audio/*,.mp3,.m4a,.mp4,.aac,.wav" multiple
+             required>
+      <button class="start">Last opp</button>
+      <ul class="media-progress" aria-live="polite" hidden></ul>
+    </form>
+    <p class="muted">Filene kan brukes i et spørsmål i <a class="gold" href="{{ url_for('build_quiz') }}">Lag kviss</a>
+      (♪ Musikk → En lydfil). Der kan du også laste opp rett fra spørsmålet.</p>
+  </section>
+
+  <section id="media-files">
+    <h2>Filene</h2>
+    <p class="muted" id="media-summary">
+      {{ files|length }} {{ "fil" if files|length == 1 else "filer" }} ·
+      {{ size_text(usage.total) }}{% if usage.max %} av {{ size_text(usage.max) }}{% endif %} brukt
+      {%- if usage.free is not none %} · {{ size_text(usage.free) }} ledig på disken{% endif %}</p>
+    {% if usage.max and usage.total >= usage.max %}
+    <p class="form-error">Grensen for lydfiler er nådd. Slett filer du ikke trenger før du laster opp flere.</p>
+    {% endif %}
+
+    {% if files %}
+    <ul class="media-list">
+      {% for f in files %}
+      <li class="media-file">
+        <div class="media-head">
+          <strong class="gold media-name">{{ f.name }}</strong>
+          <span class="muted">{{ size_text(f.size) }} · {{ f.modified|when }}</span>
+        </div>
+        <audio controls preload="none" src="{{ url_for('preview_audio', name=f.name) }}"></audio>
+        <p class="media-use">
+          {% if f.on_tv %}<span class="media-tag">På TV-en nå</span>{% endif %}
+          {% if f.quizzes %}Brukes i
+            {% for q in f.quizzes %}<a class="gold" href="{{ url_for('edit_quiz', slug=q.slug) }}">{{ q.title }}</a>
+              {%- if not loop.last %}, {% endif %}{% endfor %}
+          {% elif not f.on_tv %}<span class="muted">Ikke i bruk</span>{% endif %}
+        </p>
+        <div class="media-actions">
+          <details class="media-rename">
+            <summary class="tool">Gi nytt navn</summary>
+            {% if f.on_tv %}
+            <p class="muted">Spillet på TV-en bruker filen. Den kan få nytt navn når et nytt spill er startet.</p>
+            {% else %}
+            <form method="post" action="{{ url_for('media_rename') }}">
+              <input type="hidden" name="name" value="{{ f.name }}">
+              <label>Nytt navn <input type="text" name="new_name" value="{{ f.stem }}" maxlength="100"
+                     autocomplete="off" required></label>
+              <button class="tool">Lagre</button>
+              {% if f.quizzes %}<p class="muted">Kvissene som bruker filen, oppdateres.</p>{% endif %}
+            </form>
+            {% endif %}
+          </details>
+          <form method="post" action="{{ url_for('media_delete') }}"
+                data-confirm="Slette «{{ f.name }}»? Det kan ikke angres.">
+            <input type="hidden" name="name" value="{{ f.name }}">
+            <button class="tool bad" {% if not f.unused %}disabled
+                    title="I bruk: fjern den fra kvissene først"{% endif %}>Slett</button>
+          </form>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+    {% set unused = files|selectattr('unused')|list %}
+    {% if unused %}
+    <form method="post" action="{{ url_for('media_clean') }}" class="media-clean-start">
+      <button class="tool bad">Slett ubrukte filer ({{ unused|length }}, {{ size_text(unused|sum(attribute='size')) }})</button>
+    </form>
+    {% endif %}
+    <p class="muted">En fil som brukes i en kviss, kan ikke slettes. Fjern den fra spørsmålene i Lag kviss først.
+      Avsluttede spill bruker ikke filene, så de påvirkes ikke.</p>
+    {% else %}
+    <p class="muted">Ingen lydfiler ennå.</p>
+    {% endif %}
+  </section>
+</main>
+{% endblock %}

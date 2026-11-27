@@ -894,6 +894,30 @@ a.cell:active { transform: scale(0.96); }
 .builder-music select { margin-bottom: 0.6rem; }
 .builder-clip input[type=text] { width: 6em; margin-bottom: 0; }
 .builder-audio-help { margin-top: -0.3rem; font-size: 14px; }
+.builder-upload > .tool:first-of-type { margin-left: 0; }
+.media-notice { padding: 0.6rem 1rem; border-left: 3px solid var(--gold); background: var(--used); }
+.media-results, .media-progress, .media-list { list-style: none; margin: 0; padding: 0; }
+.media-results li, .media-progress li { margin-bottom: 0.4rem; overflow-wrap: anywhere; }
+.media-progress { margin-top: 0.8rem; }
+.media-progress .upload-failed, .media-results .upload-failed { color: #ff8a80; }
+.media-file { margin-bottom: 0.8rem; padding: 0.7rem 0.9rem; border-radius: 6px; background: var(--used); }
+.media-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.2rem 0.8rem; }
+.media-name { overflow-wrap: anywhere; }
+.media-file audio { display: block; width: 100%; height: 40px; margin: 0.5rem 0; }
+.media-use { margin: 0 0 0.5rem; }
+.media-tag { padding: 0.1rem 0.5rem; border-radius: 4px; background: var(--gold); color: #000; font-size: 14px; }
+.media-actions { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 0.5rem; }
+.media-actions form { margin: 0; }
+.media-rename { flex: 1 1 14rem; }
+.media-rename summary { display: inline-block; list-style: none; cursor: pointer; }
+.media-rename summary::-webkit-details-marker { display: none; }
+.media-rename form, .media-rename p { margin-top: 0.5rem; }
+.media-rename label { display: block; color: var(--muted); font-size: 14px; }
+.media-rename input { margin: 0.2rem 0 0.4rem; }
+.media-actions button[disabled] { opacity: 0.4; cursor: not-allowed; }
+.media-clean ul { line-height: 1.6; overflow-wrap: anywhere; }
+.media-clean-start { margin: 0.4rem 0 0.8rem; }
+.builder-upload-status { margin: -0.2rem 0 0.6rem; font-size: 14px; }
 .builder-form .invalid { outline: 2px solid #ff8a80; outline-offset: 1px; }
 .builder-problems { margin-bottom: 1rem; }
 .builder-problems a { text-decoration: underline; }

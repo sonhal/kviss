@@ -9,7 +9,8 @@ volume there:
 
 - `/data/kviss.db` is the database, with `kviss.db-wal` / `kviss.db-shm` next to it while the app runs. Mount the
   **folder**, not just the `.db` file, because SQLite creates those extra files beside the database.
-- `/data/media/` holds audio files for music questions.
+- `/data/media/` holds audio files for music questions, both those uploaded in the quiz builder and any you copy
+  there yourself.
 
 Use the same environment variables as for systemd (`KVISS_PASSWORD`, `KVISS_TZ`, …). `KVISS_DB` and `KVISS_MEDIA`
 are already set to the paths above. On first start, an empty database imports `quiz.json` and `quiz-example.json`
@@ -72,8 +73,9 @@ docker run -d --name kviss --restart unless-stopped \
 
 In `compose.yaml`, change `- kviss-data:/data` to `- /srv/kviss:/data`. To reuse the database from a systemd
 install, stop that service, copy `kviss.db` into the folder (with `kviss.db-wal`/`-shm` if they exist), and `chown`
-it as above. Add audio files with `sudo cp song.mp3 /srv/kviss/media/ && sudo chown 1000:1000 /srv/kviss/media/song.mp3`,
-or for a named volume use `docker cp song.mp3 kviss:/data/media/`.
+it as above. Audio files are easiest to add from the quiz builder (**⤒ Last opp lydfil**). To copy them in by hand,
+use `sudo cp song.mp3 /srv/kviss/media/ && sudo chown 1000:1000 /srv/kviss/media/song.mp3`, or for a named volume
+`docker cp song.mp3 kviss:/data/media/`.
 
 ### Shell commands in the container
 
@@ -173,8 +175,12 @@ Open `https://kviss.sonhal.no`. The browser asks for a login: the username can b
 password is the one in `/etc/kviss.env`.
 
 **Adding or changing quizzes:** upload them through the API ([quizzes.md](quizzes.md)). No restart
-is needed. Audio files for music questions are not in git: copy them to `/opt/kviss/media/` as described in
-[Add an MP3](quizzes.md#add-an-mp3-or-other-audio-file).
+is needed. Audio files for music questions are not in git: upload them in the quiz builder, or copy them to
+`/opt/kviss/media/` as described in [Add an MP3 by hand](quizzes.md#add-an-mp3-or-other-audio-file-by-hand). The
+unit can only write inside `/opt/kviss`, so a `KVISS_MEDIA` outside it makes builder uploads fail.
+
+Audio uploads are up to 25 MB. Caddy has no limit on request bodies by default; if your Caddyfile sets one
+(`request_body { max_size … }`), allow at least 26 MB for `/lag/lyd`.
 
 **Updating the app:** `cd /opt/kviss && sudo git pull && sudo /opt/kviss/.venv/bin/pip install -r requirements.txt && sudo chown -R kviss:kviss /opt/kviss && sudo systemctl restart kviss`.
 The `pip install` step picks up new dependencies (such as Pydantic); skipping it can stop the app from starting.
@@ -191,7 +197,8 @@ sudo -u kviss /opt/kviss/.venv/bin/python -c "import sqlite3; sqlite3.connect('/
 ```
 
 Settings in `/etc/kviss.env` (all optional): `KVISS_PASSWORD`, `KVISS_DB` (database path), `KVISS_MEDIA` (audio
-folder), `KVISS_CONFIG` (quiz imported on first start), `KVISS_TZ` (time zone for dates, default `Europe/Oslo`)
+folder), `KVISS_MEDIA_MAX_MB` (the most uploaded audio may fill the media folder with, in MB; no limit by
+default; a value that isn't a whole number stops the app from starting), `KVISS_CONFIG` (quiz imported on first start), `KVISS_TZ` (time zone for dates, default `Europe/Oslo`)
 and `KVISS_VERSION` (the version in the start page's footer; by default `git describe` of the checkout, such as
 `v0.5.0` or `v0.5.0-2-gabc1234` for two commits past it).
 

@@ -12,6 +12,7 @@
   const KEY = "kviss.utkast";
   const MAX_CATEGORIES = 12;
   const MAX_QUESTIONS = 20;
+  const MAX_AUDIO_MB = Number(root.dataset.audioMaxMb) || 25;
   const $ = (selector, el = root) => el.querySelector(selector);
   const views = { start: $("#builder-start"), editor: $("#builder-editor"), saved: $("#builder-saved") };
   const editor = views.editor;
@@ -291,11 +292,17 @@
         h("select", { "data-path": `${path}.source` },
           h("option", { value: "", text: "Ingen musikk" }),
           h("option", { value: "youtube", text: "Et klipp fra YouTube" }),
-          h("option", { value: "audio", text: "En lydfil på serveren" }))),
+          h("option", { value: "audio", text: "En lydfil" }))),
       field("YouTube-lenke eller video-ID", "youtube", { placeholder: "https://www.youtube.com/watch?v=…" }),
+      h("div", { class: "builder-row builder-upload" },
+        h("button", { type: "button", class: "tool", "data-action": "upload", text: "⤒ Last opp lydfil" }),
+        h("input", { type: "file", class: "builder-upload-input", hidden: true,
+          accept: "audio/*,.mp3,.m4a,.mp4,.aac,.wav" })),
+      h("p", { class: "muted builder-upload-status", "aria-live": "polite", hidden: true }),
       field("Filnavn i media-mappen", "audio", { placeholder: "take-on-me.mp3" }),
       h("p", { class: "muted builder-audio-help",
-        text: "Filen må ligge på serveren før du lagrer (.mp3, .m4a, .aac eller .wav)." }),
+        text: `MP3, M4A/MP4 (AAC), AAC eller WAV, maks ${MAX_AUDIO_MB} MB. Du kan også skrive navnet på en fil som `
+          + "allerede ligger i media-mappen på serveren." }),
       h("div", { class: "builder-row builder-clip" },
         field("Start", "start", { placeholder: "0:00" }),
         field("Slutt", "end", { placeholder: "slutten" }),
@@ -316,6 +323,8 @@
     music.querySelector(".builder-field-youtube").hidden = sourceKind !== "youtube";
     music.querySelector(".builder-field-audio").hidden = sourceKind !== "audio";
     music.querySelector(".builder-audio-help").hidden = sourceKind !== "audio";
+    music.querySelector(".builder-upload").hidden = sourceKind !== "audio";
+    if (sourceKind !== "audio") music.querySelector(".builder-upload-status").hidden = true;
     music.querySelector(".builder-clip").hidden = !sourceKind;
     music.querySelector("summary").textContent = sourceKind === "youtube" ? "♪ Musikk · YouTube"
       : sourceKind === "audio" ? "♪ Musikk · lydfil" : "♪ Musikk";
@@ -422,6 +431,10 @@
     }
     if (action === "test") {
       testClip(button.closest(".builder-question"));
+      return;
+    }
+    if (action === "upload") {
+      button.parentElement.querySelector(".builder-upload-input").click();
       return;
     }
     if (action === "reload-source") {
@@ -578,6 +591,73 @@
       time: () => el.currentTime,
       playing: () => !el.paused && el.currentTime > 0,
     };
+  }
+
+  // --- uploading an audio file -----------------------------------------------------------
+  // ⤒ Last opp lydfil sends the file to POST /lag/lyd, which checks what it really is, stores it in the media
+  // folder and answers with the file name; that name is put in the question's audio field. XHR rather than
+  // fetch, for the progress: a song is several MB, and phones upload slowly.
+
+  editor.addEventListener("change", (e) => {
+    const input = e.target;
+    if (!input.classList.contains("builder-upload-input") || !input.files.length) return;
+    const file = input.files[0];
+    input.value = ""; // choosing the same file again fires change again
+    uploadAudio(input.closest(".builder-question"), file);
+  });
+
+  const megabytes = (bytes) => (bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} kB`
+    : `${(bytes / 1024 / 1024).toFixed(1).replace(".", ",")} MB`);
+
+  function uploadAudio(question, file) {
+    const status = question.querySelector(".builder-upload-status");
+    const button = question.querySelector('[data-action="upload"]');
+    if (file.size > MAX_AUDIO_MB * 1024 * 1024) {
+      return say(status, `«${file.name}» er ${megabytes(file.size)}. Maks er ${MAX_AUDIO_MB} MB.`);
+    }
+    // The question may be moved, or the editor closed, before the upload is done: keep its form object.
+    const draft = current;
+    const q = getPath(draft.quiz, question.dataset.loc);
+    const body = new FormData();
+    body.append("file", file);
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", root.dataset.uploadUrl);
+    xhr.responseType = "json";
+    xhr.upload.addEventListener("progress", (e) => {
+      if (e.lengthComputable) say(status, `Laster opp «${file.name}» … ${Math.round((e.loaded / e.total) * 100)} %`);
+    });
+    const done = (message) => {
+      button.disabled = false;
+      say(status, message);
+    };
+    xhr.addEventListener("error", () => done("Fikk ikke kontakt med serveren. Prøv igjen."));
+    xhr.addEventListener("load", () => {
+      const reply = xhr.response;
+      if (xhr.status !== 200 && xhr.status !== 201) {
+        return done(reply?.error || `Opplastingen feilet (HTTP ${xhr.status}).`);
+      }
+      q.source = "audio";
+      q.audio = reply.file;
+      if (draft === current) {
+        const field = question.isConnected && question.querySelector(".builder-field-audio input");
+        if (field) {
+          field.value = reply.file;
+          field.classList.remove("invalid");
+          field.removeAttribute("aria-invalid");
+        }
+        saveSoon();
+      } else {
+        draft.updated = new Date().toISOString();
+        putDraft(draft);
+      }
+      done(reply.reused
+        ? `«${reply.file}» fantes allerede på serveren, og brukes. Trykk ▶ Test for å høre den.`
+        : `Lastet opp som «${reply.file}» (${reply.format}, ${megabytes(file.size)}). Trykk ▶ Test for å høre den.`);
+    });
+    if (clip?.question === question) stopClip();
+    button.disabled = true;
+    say(status, `Laster opp «${file.name}» …`);
+    xhr.send(body);
   }
 
   // One hidden YouTube player for the page, made the first time a YouTube clip is tested.
