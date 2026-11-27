@@ -131,7 +131,7 @@ Tap **▶ Test** to hear it, and set **Start** and **Slutt**.
   A *different* file with a name that is taken gets `-2`, `-3` … added, so an upload never replaces a file a quiz
   already uses.
 - **Nothing is deleted automatically.** A file stays in the media folder when the question or quiz that used it is
-  removed, since other quizzes and old games may still play it. Clean up by hand on the server if disk gets tight.
+  removed. Rename and delete files on the **Lydfiler** page (below).
 
 The same upload works from a script: `curl -u ":$PW" -F "file=@take-on-me.mp3" "$URL/lag/lyd"` answers
 `{"file": "take-on-me.mp3", "format": "MP3", "reused": false}` (`201`; `200` with `reused: true` for a file
@@ -154,6 +154,28 @@ that was already there), or `400`/`413` with an `error`.
 5. Upload the quiz again ([The API](#the-api)), start a game with it, open **⚙ Admin → Musikk** and tap the
    question to check that the clip plays. Some videos can't be played outside YouTube (see below). If so,
    use another upload of the same song.
+
+### Managing audio files (Lydfiler)
+
+**⚙ Admin → ♪ Lydfiler** (`/lydfiler`) lists every audio file in the media folder, sub-folders included, whether it
+was uploaded or copied there by hand. Each file shows its size and date, a player to listen to it, and the stored
+quizzes that use it (tap one to open it in the builder). **På TV-en nå** marks a file the game on the TV plays.
+
+- **Last opp** takes several files at once. They are uploaded one at a time, with progress for each, by the same
+  rules as in the builder. (Without JavaScript, the files in one upload can add up to 25 MB.)
+- **Gi nytt navn** renames a file. The name is cleaned like an upload's (`A-ha – Take On Me` →
+  `a-ha-take-on-me.mp3`); the folder and extension stay. **Every stored quiz that uses the file is updated** in the
+  same step. Not changed: finished games (they don't play anything), and builder drafts in a browser, whose old
+  name is then reported when the draft is saved.
+- **Slett** deletes a file no stored quiz uses. A file a quiz uses can't be deleted: remove it from the questions
+  in **Lag kviss** first (the button is greyed out, and a hand-made request gets `409`).
+- **Slett ubrukte filer** deletes every file no stored quiz uses, after a page that lists them. A file that a quiz
+  starts using before you confirm is kept.
+- **The game on the TV keeps its files.** It plays its own copy of the quiz, so a file it uses can't be renamed or
+  deleted, even if no stored quiz uses it any more, until another game is started.
+- The page shows how much space the files take and how much is free on the disk. To cap it, set
+  `KVISS_MEDIA_MAX_MB` (e.g. `2000`): uploads that would go past it are refused with
+  "Lydmappen er full …". Files copied in by hand count too, but are never refused. No limit is set by default.
 
 ### Add an MP3 (or other audio file) by hand
 

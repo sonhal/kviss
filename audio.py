@@ -14,7 +14,7 @@ import threading
 from dataclasses import dataclass
 from pathlib import Path
 
-from schemas import slugify
+from schemas import AUDIO_TYPES, slugify
 
 MAX_AUDIO_MB = 25  # per file; a 4-minute MP3/M4A song is 4-10 MB
 MAX_AUDIO_UPLOAD = MAX_AUDIO_MB * 1024 * 1024  # bytes
@@ -228,13 +228,61 @@ def clean_name(filename):
     return slugify(stem) or "lyd"
 
 
-def save_upload(stream, filename, media_dir, max_size=MAX_AUDIO_UPLOAD):
+def audio_files(media_dir):
+    """The audio files in media_dir, sub-folders included, as the names a quiz's "audio" field uses
+    ("take-on-me.mp3", "80s/take-on-me.mp3"), sorted. Hidden files and folders (an upload's temporary file)
+    and other file types are left out."""
+    media_dir = Path(media_dir)
+    if not media_dir.is_dir():
+        return []
+    names = []
+    for path in media_dir.rglob("*"):
+        rel = path.relative_to(media_dir)
+        if (path.suffix.lower() in AUDIO_TYPES and not any(part.startswith(".") for part in rel.parts)
+                and path.is_file()):
+            names.append(rel.as_posix())
+    return sorted(names, key=lambda name: (name.lower(), name))
+
+
+def used_bytes(media_dir):
+    """The total size of the audio files in media_dir."""
+    media_dir = Path(media_dir)
+    return sum((media_dir / name).stat().st_size for name in audio_files(media_dir))
+
+
+def size_text(size):
+    """A size as the pages show it, with a Norwegian decimal comma: 9216 -> '9 kB', 1572864 -> '1,5 MB',
+    64424509440 -> '60,0 GB'."""
+    if size < 1024 * 1024:
+        return f"{round(size / 1024)} kB"
+    mb = size / (1024 * 1024)
+    return (f"{mb / 1024:.1f} GB" if mb >= 1024 else f"{mb:.1f} MB").replace(".", ",")
+
+
+class MediaFull(AudioError):
+    def __init__(self, used, max_total):
+        super().__init__(f"Lydmappen er full: {size_text(used)} av {size_text(max_total)} er brukt. "
+                         "Slett lydfiler som ikke brukes på siden Lydfiler, og prøv igjen.")
+
+
+def _claim(target):
+    """Create target as an empty file, so no one else can take the name. False if it exists already."""
+    try:
+        os.close(os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644))
+    except FileExistsError:
+        return False
+    return True
+
+
+def save_upload(stream, filename, media_dir, max_size=MAX_AUDIO_UPLOAD, max_total=None):
     """Store an uploaded audio file in media_dir. Returns (name, AudioFormat, reused).
 
     name is the file name relative to media_dir, as the quiz's "audio" field names it: the uploaded name made
     safe ("take-on-me.mp3"), with -2, -3 ... added if a different file already has that name. If the same
     file (same contents) is already there under that name, it is reused and reused is True.
-    Raises AudioError if the file is too big or not a format the game can play.
+    max_total: the most the media folder's audio files may add up to, in bytes (None: no limit). A reused
+    file doesn't count, since it takes no more space.
+    Raises AudioError if the file is too big, not a format the game can play, or doesn't fit (MediaFull).
     """
     media_dir = Path(media_dir)
     media_dir.mkdir(parents=True, exist_ok=True)
@@ -265,9 +313,9 @@ def save_upload(stream, filename, media_dir, max_size=MAX_AUDIO_UPLOAD):
                     if target.is_file() and target.stat().st_size == size and _digest(target) == digest:
                         return name, fmt, True
                     continue
-                try:  # claim the name; O_EXCL fails if another upload took it in the meantime
-                    os.close(os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644))
-                except FileExistsError:
+                if max_total is not None and (used := used_bytes(media_dir)) + size > max_total:
+                    raise MediaFull(used, max_total)
+                if not _claim(target):  # another process took the name in the meantime
                     continue
                 os.replace(tmp, target)
                 return name, fmt, False
@@ -275,3 +323,25 @@ def save_upload(stream, filename, media_dir, max_size=MAX_AUDIO_UPLOAD):
     finally:
         tmp.unlink(missing_ok=True)
 
+
+def rename(media_dir, name, new_name):
+    """Rename the audio file `name` (as audio_files lists it) to new_name, made safe like an upload's name
+    ("A-ha – Take On Me" -> "a-ha-take-on-me"). The folder and extension stay. Returns the new name.
+    Raises AudioError if new_name is empty after cleaning or another file has it."""
+    media_dir = Path(media_dir)
+    stem = slugify(new_name or "")
+    if not stem:
+        raise AudioError("Skriv et nytt navn med minst én bokstav eller ett tall.")
+    old = Path(name)
+    new = (old.parent / f"{stem}{old.suffix.lower()}").as_posix()
+    if new == name:
+        return name
+    with _save_lock:
+        if not _claim(media_dir / new):
+            raise AudioError(f"Det finnes allerede en fil som heter «{new}».")
+        try:
+            os.replace(media_dir / name, media_dir / new)
+        except OSError:
+            (media_dir / new).unlink(missing_ok=True)
+            raise
+    return new

@@ -197,7 +197,8 @@ sudo -u kviss /opt/kviss/.venv/bin/python -c "import sqlite3; sqlite3.connect('/
 ```
 
 Settings in `/etc/kviss.env` (all optional): `KVISS_PASSWORD`, `KVISS_DB` (database path), `KVISS_MEDIA` (audio
-folder), `KVISS_CONFIG` (quiz imported on first start), `KVISS_TZ` (time zone for dates, default `Europe/Oslo`)
+folder), `KVISS_MEDIA_MAX_MB` (the most uploaded audio may fill the media folder with, in MB; no limit by
+default; a value that isn't a whole number stops the app from starting), `KVISS_CONFIG` (quiz imported on first start), `KVISS_TZ` (time zone for dates, default `Europe/Oslo`)
 and `KVISS_VERSION` (the version in the start page's footer; by default `git describe` of the checkout, such as
 `v0.5.0` or `v0.5.0-2-gabc1234` for two commits past it).
 

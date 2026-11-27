@@ -14,6 +14,7 @@ services:
       KVISS_PASSWORD: ${KVISS_PASSWORD:?set KVISS_PASSWORD in .env or the shell}
       KVISS_TZ: ${KVISS_TZ:-Europe/Oslo}   # dates shown in the app
       TZ: ${KVISS_TZ:-Europe/Oslo}         # timestamps in `docker compose logs` (otherwise UTC)
+      KVISS_MEDIA_MAX_MB: ${KVISS_MEDIA_MAX_MB:-}  # MB of audio uploads may fill /data/media with; empty: no limit
     volumes:
       - kviss-data:/data
     # The same hardening as the systemd unit: only /data (and a scratch /tmp) is writable.

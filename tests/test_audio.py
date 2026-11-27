@@ -125,7 +125,9 @@ class SniffTest(unittest.TestCase):
         self.assertEqual(list(media.iterdir()), [])
 
 
-class UploadRouteTest(unittest.TestCase):
+class AppTestCase(unittest.TestCase):
+    """An app with an empty database and media folder, and helpers to upload to it."""
+
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.tmp)
@@ -143,6 +145,9 @@ class UploadRouteTest(unittest.TestCase):
 
     def files(self):
         return sorted(p.name for p in self.media.iterdir())
+
+
+class UploadRouteTest(AppTestCase):
 
     def test_upload_stores_the_file_under_a_clean_name(self):
         resp = self.post(mp3(), "Take On Me.mp3")
@@ -222,6 +227,174 @@ class UploadRouteTest(unittest.TestCase):
         page = self.client.get("/lag").get_data(as_text=True)
         self.assertIn('data-upload-url="/lag/lyd"', page)
         self.assertIn('data-audio-max-mb="25"', page)
+
+
+
+def music_quiz(title, *files):
+    return {"title": title, "categories": [{"name": "Låter", "questions": [
+        {"value": 100 * (i + 1), "question": "Hvem?", "answer": "a-ha", "audio": f} for i, f in enumerate(files)]}]}
+
+
+class MediaPageTest(AppTestCase):
+    """/lydfiler: the list of audio files, and renaming and deleting them."""
+
+    def setUp(self):
+        super().setUp()
+        for name, frames in (("a.mp3", 4), ("b.mp3", 5), ("c.mp3", 6)):
+            self.post(mp3(frames), name)
+        (self.media / "80s").mkdir()
+        (self.media / "80s" / "d.mp3").write_bytes(mp3(7))
+        (self.media / "notes.txt").write_text("not audio")
+        (self.media / ".upload-abc").write_bytes(mp3())  # an upload in progress
+        self.save(music_quiz("Fredag", "a.mp3", "80s/d.mp3"))
+        self.save(music_quiz("Lørdag", "a.mp3"))
+
+    def save(self, quiz):
+        resp = self.client.post("/api/quizzes", json=quiz)
+        self.assertIn(resp.status_code, (200, 201), resp.get_json())
+
+    def quiz_audio(self, slug):
+        quiz = self.client.get(f"/api/quizzes/{slug}").get_json()
+        return [q.get("audio") for c in quiz["categories"] for q in c["questions"]]
+
+    def page(self):
+        resp = self.client.get("/lydfiler")
+        self.assertEqual(resp.status_code, 200)
+        return resp.get_data(as_text=True)
+
+    def test_lists_audio_files_with_what_uses_them(self):
+        page = self.page()
+        for name in ("a.mp3", "b.mp3", "c.mp3", "80s/d.mp3"):
+            self.assertIn(f'value="{name}"', page)
+        self.assertNotIn("notes.txt", page)
+        self.assertNotIn(".upload-abc", page)
+        self.assertIn('href="/lag/fredag">Fredag</a>', page)
+        self.assertIn('href="/lag/lordag">Lørdag</a>', page)
+        self.assertEqual(page.count("Ikke i bruk"), 2)  # b and c
+        self.assertIn('src="/lag/lyd/80s/d.mp3"', page)
+        self.assertIn("4 filer", page)
+        self.assertIn("Slett ubrukte filer (2,", page)
+        self.assertIn('href="/lydfiler"', self.client.get("/admin").get_data(as_text=True))
+
+    def test_delete_only_unused_files(self):
+        resp = self.client.post("/lydfiler/slett", data={"name": "b.mp3"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("Slettet «b.mp3»", resp.get_data(as_text=True))
+        self.assertFalse((self.media / "b.mp3").exists())
+        resp = self.client.post("/lydfiler/slett", data={"name": "a.mp3"})
+        self.assertEqual(resp.status_code, 409)
+        self.assertTrue((self.media / "a.mp3").exists())
+        for name in ("b.mp3", "../kviss.db", "notes.txt", ".upload-abc", ""):
+            self.assertEqual(self.client.post("/lydfiler/slett", data={"name": name}).status_code, 404, name)
+        self.assertTrue((self.tmp / "kviss.db").exists())
+        self.assertTrue((self.media / "notes.txt").exists())
+
+    def test_the_game_on_the_tv_keeps_its_files(self):
+        self.client.post("/nytt/lordag", data={"players": "A\nB"})
+        self.client.delete("/api/quizzes/lordag")
+        self.client.delete("/api/quizzes/fredag")
+        # No stored quiz uses a.mp3 now, but the game on the TV has its own copy of the quiz that does.
+        self.assertIn("På TV-en nå", self.page())
+        self.assertEqual(self.client.post("/lydfiler/slett", data={"name": "a.mp3"}).status_code, 409)
+        resp = self.client.post("/lydfiler/nytt-navn", data={"name": "a.mp3", "new_name": "x"})
+        self.assertEqual(resp.status_code, 409)
+        resp = self.client.post("/lydfiler/rydd", data={"confirm": "yes", "names": ["a.mp3", "b.mp3"]})
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue((self.media / "a.mp3").exists())
+        self.assertFalse((self.media / "b.mp3").exists())
+        resp = self.client.get("/media/a.mp3")
+        self.assertEqual(resp.status_code, 200)
+        resp.close()
+
+    def test_rename_updates_the_quizzes_that_use_the_file(self):
+        resp = self.client.post("/lydfiler/nytt-navn", data={"name": "a.mp3", "new_name": "A-ha – Take On Me"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("heter nå «a-ha-take-on-me.mp3». Oppdaterte Fredag, Lørdag.", resp.get_data(as_text=True))
+        self.assertEqual((self.media / "a-ha-take-on-me.mp3").read_bytes(), mp3(4))
+        self.assertFalse((self.media / "a.mp3").exists())
+        self.assertEqual(self.quiz_audio("fredag"), ["a-ha-take-on-me.mp3", "80s/d.mp3"])
+        self.assertEqual(self.quiz_audio("lordag"), ["a-ha-take-on-me.mp3"])
+        # A sub-folder stays; the quizzes still pass the checks a save makes.
+        resp = self.client.post("/lydfiler/nytt-navn", data={"name": "80s/d.mp3", "new_name": "Hit"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(self.quiz_audio("fredag"), ["a-ha-take-on-me.mp3", "80s/hit.mp3"])
+        quiz = self.client.get("/api/quizzes/fredag").get_json()
+        self.assertEqual(self.client.post("/api/quizzes", json=quiz).status_code, 200)
+
+    def test_rename_refusals(self):
+        def rename(name, new_name):
+            return self.client.post("/lydfiler/nytt-navn", data={"name": name, "new_name": new_name})
+        resp = rename("b.mp3", "C")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("allerede en fil som heter «c.mp3»", resp.get_data(as_text=True))
+        self.assertEqual(rename("b.mp3", "♪").status_code, 400)
+        self.assertIn("har allerede det navnet", rename("b.mp3", "B").get_data(as_text=True))
+        self.assertEqual(rename("missing.mp3", "x").status_code, 404)
+        self.assertEqual(rename("b.mp3", "../../evil").status_code, 200)  # cleaned to a plain name
+        self.assertTrue((self.media / "evil.mp3").exists())
+        self.assertEqual((self.media / "c.mp3").read_bytes(), mp3(6))
+
+    def test_delete_unused_asks_first_and_keeps_files_put_to_use_meanwhile(self):
+        resp = self.client.post("/lydfiler/rydd")
+        page = resp.get_data(as_text=True)
+        self.assertIn("Slette ubrukte filer?", page)
+        self.assertIn('name="names" value="b.mp3"', page)
+        self.assertIn('name="names" value="c.mp3"', page)
+        self.assertNotIn('name="names" value="a.mp3"', page)
+        self.assertTrue((self.media / "b.mp3").exists())
+        self.save(music_quiz("Søndag", "c.mp3"))  # c is used before the host confirms
+        resp = self.client.post("/lydfiler/rydd", data={"confirm": "yes", "names": ["a.mp3", "b.mp3", "c.mp3"]})
+        self.assertIn("Slettet 1 fil", resp.get_data(as_text=True))
+        self.assertEqual(sorted(p.name for p in self.media.glob("*.mp3")), ["a.mp3", "c.mp3"])
+        self.assertIn("Ingenting å rydde", self.client.post("/lydfiler/rydd").get_data(as_text=True))
+
+    def test_upload_without_javascript(self):
+        boundary, body = encode_multipart({"files": [FileStorage(io.BytesIO(mp3(8)), "Ny sang.mp3"),
+                                                     FileStorage(io.BytesIO(b"nope"), "x.mp3")]})
+        resp = self.client.post("/lydfiler", data=body, content_type=f"multipart/form-data; boundary={boundary}")
+        self.assertEqual(resp.status_code, 200)
+        page = resp.get_data(as_text=True)
+        self.assertIn("ny-sang.mp3", page)
+        self.assertIn("ikke en lydfil", page)
+        self.assertEqual(self.client.post("/lydfiler", data={}).status_code, 400)
+
+    def test_new_posts_need_password_and_same_origin(self):
+        client = self.make_client(password="s3cret")
+        auth = {"Authorization": "Basic " + base64.b64encode(b":s3cret").decode()}
+        self.assertEqual(client.get("/lydfiler").status_code, 401)
+        for url in ("/lydfiler", "/lydfiler/slett", "/lydfiler/nytt-navn", "/lydfiler/rydd"):
+            self.assertEqual(client.post(url, data={"name": "b.mp3"}).status_code, 401, url)
+            resp = client.post(url, data={"name": "b.mp3", "confirm": "yes", "names": "b.mp3"},
+                               headers={**auth, "Origin": "https://evil.example"})
+            self.assertEqual(resp.status_code, 403, url)
+        self.assertTrue((self.media / "b.mp3").exists())
+
+
+class QuotaTest(AppTestCase):
+    def setUp(self):
+        super().setUp()
+        self.client = create_app(self.tmp / "kviss.db", media_dir=self.media, seed=[], password="",
+                                 media_max_mb=1).test_client()
+
+    def test_uploads_stop_at_the_limit(self):
+        big = mp3(frames=2000)  # 834,000 bytes = 814 kB
+        self.assertEqual(self.post(big, "a.mp3").status_code, 201)
+        self.assertEqual(self.post(big, "a.mp3").status_code, 200)  # the same file again takes no space
+        resp = self.post(mp3(frames=1000), "b.mp3")  # 417 kB more: past 1 MB
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("Lydmappen er full: 814 kB av 1,0 MB er brukt", resp.get_json()["error"])
+        self.assertEqual(self.files(), ["a.mp3"])
+        self.assertEqual(self.post(mp3(frames=300), "c.mp3").status_code, 201)  # 125 kB still fits
+        self.assertIn("av 1,0 MB brukt", self.client.get("/lydfiler").get_data(as_text=True))
+
+    def test_setting(self):
+        from app import default_media_max_mb
+        for value, expected in (("", None), ("500", 500), (" 20 ", 20)):
+            with mock.patch.dict("os.environ", {"KVISS_MEDIA_MAX_MB": value}):
+                self.assertEqual(default_media_max_mb(), expected)
+        for value in ("0", "-5", "1.5", "lots"):
+            with mock.patch.dict("os.environ", {"KVISS_MEDIA_MAX_MB": value}), self.assertRaises(ValueError):
+                default_media_max_mb()
 
 
 if __name__ == "__main__":
