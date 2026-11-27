@@ -14,7 +14,7 @@ already exists replaces it.** That is how you fix a typo. To keep both, give the
 Open **Lag kviss** (`/lag`). **＋ Ny kviss** starts an empty quiz with one category of five questions (100–500);
 the list under it opens a stored quiz for editing. The form covers everything in [the quiz format](#the-quiz-format):
 title, players, categories and questions (add, delete and move them with ↑ ↓ ✕), music under **♪ Musikk** per
-question, and the final question. A pasted YouTube link is turned into the video ID, and `start`/`end` can be typed
+question (a YouTube link, or an audio file you upload right there), and the final question. A pasted YouTube link is turned into the video ID, and `start`/`end` can be typed
 as seconds (`75`) or minutes (`1:15`).
 
 - **Drafts are kept in the browser**, in `localStorage`, saved a moment after every keystroke. Closing the tab or
@@ -31,7 +31,9 @@ as seconds (`75`) or minutes (`1:15`).
 - **▶ Test** under **♪ Musikk** plays the clip as the question screen will: from Start, stopping by itself at Slutt
   (or at the end of the song), with the time shown while it plays. **■ Stopp** stops it, and only one clip plays at a
   time. A YouTube clip plays in the same invisible player as in the game, so a video whose owner blocks playing it
-  outside YouTube says so here, before game night. An audio file must already be in the media folder on the server.
+  outside YouTube says so here, before game night.
+- **⤒ Last opp lydfil** (under **♪ Musikk → En lydfil**) uploads a song from the phone or computer to the server's
+  media folder and fills in its file name. See [Upload an audio file](#upload-an-audio-file-in-the-builder).
 - **Last ned som fil** downloads the draft as quiz JSON, for a backup or for **Last opp kviss** on another server.
 - The builder needs JavaScript; without it, the page points to **Last opp kviss**.
 
@@ -39,7 +41,8 @@ as seconds (`75`) or minutes (`1:15`).
 
 Open **Last opp kviss** (`/last-opp`), pick one or more `.json` files and tap **Last opp**. The checks, the
 1 MB limit (for all the files together) and the replace-by-slug rule are the same as for the API below. Audio files
-for music questions still have to be copied to the server first.
+the quiz names must already be on the server: upload them in the builder (or `POST /lag/lyd`, below), or copy them
+there.
 
 ## The API
 
@@ -111,6 +114,29 @@ A music question plays a song clip, and the players answer a question about it (
 One clip is one question, and the host judges it like any other. The song comes either from **YouTube**
 (only the sound is played, the video is never shown) or from an **audio file** such as an MP3.
 
+### Upload an audio file in the builder
+
+The easiest way to use your own songs. In **Lag kviss**, open **♪ Musikk** on a question, choose **En lydfil** and
+tap **⤒ Last opp lydfil**. Pick the song; the page shows the progress, and the stored file name is filled in.
+Tap **▶ Test** to hear it, and set **Start** and **Slutt**.
+
+- **Formats:** MP3, MPEG-4 audio (`.m4a`, or an `.mp4` with an AAC sound track), raw AAC (`.aac`) and WAV, up to
+  **25 MB** per file. These play in Safari and Chrome on phones and computers. Files are stored as they are, not
+  converted.
+- **The contents decide, not the name.** The server reads the start of the file to see what it really is, and stores
+  it with the matching extension: an `.mp4` becomes `.m4a`, and an MP3 someone named `.m4a` is stored as `.mp3`.
+  Anything else is refused with a message, including FLAC, Ogg, Opus, Apple Lossless (ALAC) and copy-protected
+  iTunes files (`.m4p`). Convert those to AAC or MP3 first, e.g. `ffmpeg -i song.flac -b:a 192k song.m4a`.
+- **Names:** `Take On Me (Live).mp3` is stored as `take-on-me-live.mp3`. Uploading the same file again reuses it.
+  A *different* file with a name that is taken gets `-2`, `-3` … added, so an upload never replaces a file a quiz
+  already uses.
+- **Nothing is deleted automatically.** A file stays in the media folder when the question or quiz that used it is
+  removed, since other quizzes and old games may still play it. Clean up by hand on the server if disk gets tight.
+
+The same upload works from a script: `curl -u ":$PW" -F "file=@take-on-me.mp3" "$URL/lag/lyd"` answers
+`{"file": "take-on-me.mp3", "format": "MP3", "reused": false}` (`201`; `200` with `reused: true` for a file
+that was already there), or `400`/`413` with an `error`.
+
 ### Add a YouTube song
 
 1. Find the song on YouTube and copy the link, e.g. `https://www.youtube.com/watch?v=dQw4w9WgXcQ`.
@@ -129,7 +155,9 @@ One clip is one question, and the host judges it like any other. The song comes 
    question to check that the clip plays. Some videos can't be played outside YouTube (see below). If so,
    use another upload of the same song.
 
-### Add an MP3 (or other audio file)
+### Add an MP3 (or other audio file) by hand
+
+Without the builder, for example to add many files at once:
 
 1. Put the file in the `media` folder next to `app.py` (or the folder `KVISS_MEDIA` points at).
    Locally: `kviss/media/take-on-me.mp3`. On the server: `/opt/kviss/media/take-on-me.mp3`.
@@ -156,7 +184,8 @@ One clip is one question, and the host judges it like any other. The song comes 
 ### Fields
 
 - `youtube`: an 11-character YouTube **video ID**. A whole link is rejected.
-- `audio`: a file name inside `media/`, e.g. `"take-on-me.mp3"` or `"80s/take-on-me.mp3"`.
+- `audio`: a file name inside `media/`, e.g. `"take-on-me.mp3"` or `"80s/take-on-me.mp3"`: the name the builder
+  filled in after an upload, or the path of a file you copied there.
 - Use **either** `youtube` **or** `audio` in a question, not both.
 - `start` / `end` (optional): seconds into the song. Playback begins at `start` (default 0) and stops at
   `end` (default: the end of the song). **Spill av** after the clip has ended, or **Fra start**, plays it again

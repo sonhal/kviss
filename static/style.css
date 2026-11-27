@@ -894,6 +894,8 @@ a.cell:active { transform: scale(0.96); }
 .builder-music select { margin-bottom: 0.6rem; }
 .builder-clip input[type=text] { width: 6em; margin-bottom: 0; }
 .builder-audio-help { margin-top: -0.3rem; font-size: 14px; }
+.builder-upload > .tool:first-of-type { margin-left: 0; }
+.builder-upload-status { margin: -0.2rem 0 0.6rem; font-size: 14px; }
 .builder-form .invalid { outline: 2px solid #ff8a80; outline-offset: 1px; }
 .builder-problems { margin-bottom: 1rem; }
 .builder-problems a { text-decoration: underline; }

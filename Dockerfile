@@ -19,7 +19,7 @@ RUN groupadd --system --gid 1000 kviss \
     && chown -R kviss:kviss /data
 
 WORKDIR /app
-COPY app.py schemas.py quiz.json quiz-example.json /app/
+COPY app.py audio.py schemas.py quiz.json quiz-example.json /app/
 COPY static /app/static
 COPY templates /app/templates
 

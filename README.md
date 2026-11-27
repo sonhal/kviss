@@ -9,8 +9,8 @@ score as the teams answer. The screens are in Norwegian (bokmål); the code, con
   ✓ or ✗ for each team; wrong answers subtract points and lock that team out of the question.
 - **Daily Doubles and Final Jeopardy** (*Dagens dobbel*, *Finale*). Both are optional and turned on per game, with
   wagers checked against each team's score and a countdown for the final.
-- **Music questions.** Play a clip from YouTube (sound only, so the title doesn't give it away) or from a local
-  audio file, with start and end times.
+- **Music questions.** Play a clip from YouTube (sound only, so the title doesn't give it away) or from an audio
+  file (MP3, M4A/MP4, AAC or WAV) uploaded in the quiz builder, with start and end times.
 - **A podium at the end.** The host reveals 3rd, 2nd and 1st place one tap at a time, with confetti.
 - **A host view** (`/vert`). Open it on a second device to see the answer while the TV shows only the question.
 - **Quizzes are stored and reusable.** Write them in the browser builder (`/lag`), upload JSON files (`/last-opp`),

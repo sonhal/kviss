@@ -32,11 +32,15 @@ from flask import (Flask, Response, abort, jsonify, redirect, render_template, r
                    url_for)
 from werkzeug.exceptions import RequestEntityTooLarge
 
+from audio import MAX_AUDIO_MB, MAX_AUDIO_UPLOAD, AudioError, AudioTooLarge, save_upload
 from schemas import (AUDIO_TYPES, FINAL_SECONDS, MIN_WAGER, AdjustForm, ConfigError, ConfirmForm, FinalJudgeForm,
                      FormError, JudgeForm, NewGameForm, UndoForm, WagerForm, parse_form, parse_quiz)
 
 BASE_DIR = Path(__file__).resolve().parent
 mimetypes.add_type("application/manifest+json", ".webmanifest")
+# Audio for music questions, in case the system's MIME table lacks one (Safari wants the right type).
+for _type, _ext in (("audio/mpeg", ".mp3"), ("audio/mp4", ".m4a"), ("audio/aac", ".aac"), ("audio/wav", ".wav")):
+    mimetypes.add_type(_type, _ext)
 UNDO_LIMIT = 50
 MAX_UPLOAD = 1024 * 1024  # bytes; a big quiz is well under 100 kB
 
@@ -923,14 +927,14 @@ def create_app(db_path=None, password=None, media_dir=None, seed=None):
 
     @app.get("/lag")
     def build_quiz():
-        return render_template("builder.html", quizzes=store.quizzes(), source=None)
+        return render_template("builder.html", quizzes=store.quizzes(), source=None, audio_max_mb=MAX_AUDIO_MB)
 
     @app.get("/lag/<slug>")
     def edit_quiz(slug):
         q = store.quiz(slug)
         if q is None:
             abort(404)
-        return render_template("builder.html", quizzes=store.quizzes(), source=downloadable(q))
+        return render_template("builder.html", quizzes=store.quizzes(), source=downloadable(q), audio_max_mb=MAX_AUDIO_MB)
 
     @app.get("/lag/lyd/<path:name>")
     def preview_audio(name):
@@ -939,6 +943,27 @@ def create_app(db_path=None, password=None, media_dir=None, seed=None):
         if Path(name).suffix.lower() not in AUDIO_TYPES:
             abort(404)
         return send_from_directory(kviss.media_dir, name)
+
+    @app.post("/lag/lyd")
+    def upload_audio():
+        """One audio file (form field "file") from the builder's upload button, saved in the media folder.
+
+        201 {"file": name for the quiz's "audio" field, "format", "reused": false}, or 200 with reused true when
+        the same file is already there. 400/413 {"error": message for the user}. Only this route accepts
+        bodies over 1 MB; the file's format is checked from its contents (audio.py).
+        """
+        request.max_content_length = MAX_AUDIO_UPLOAD + 64 * 1024  # room for the multipart headers
+        try:
+            upload = request.files.get("file")
+        except RequestEntityTooLarge:
+            return jsonify(error=str(AudioTooLarge(MAX_AUDIO_UPLOAD))), 413
+        if upload is None or not upload.filename:
+            return jsonify(error="Velg en lydfil."), 400
+        try:
+            name, fmt, reused = save_upload(upload.stream, upload.filename, kviss.media_dir, MAX_AUDIO_UPLOAD)
+        except AudioError as e:
+            return jsonify(error=str(e)), 413 if isinstance(e, AudioTooLarge) else 400
+        return jsonify(file=name, format=fmt.label, reused=reused), 200 if reused else 201
 
     @app.post("/lag")
     def save_built_quiz():
